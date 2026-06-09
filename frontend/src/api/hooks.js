@@ -43,6 +43,17 @@ export function useMyShare(examId) {
   });
 }
 
+export function usePaperImage(examId, enabled) {
+  const { token, username } = useActive();
+  return useQuery({
+    queryKey: ["paper-image", examId, username],
+    queryFn: () => api.getImage(`/exams/${examId}/paper/image`, token),
+    enabled: !!token && !!examId && !!enabled,
+    staleTime: Infinity, // the watermarked PNG is stable per candidate
+    retry: false,
+  });
+}
+
 export function useAudit() {
   const { token, username } = useActive();
   return useQuery({
