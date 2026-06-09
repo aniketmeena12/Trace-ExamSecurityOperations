@@ -19,6 +19,7 @@ htmlcov/
 trace.db
 *.sqlite3
 backend/instance/
+demo_output/
 
 # Node / frontend (M4)
 node_modules/

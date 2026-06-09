@@ -52,7 +52,7 @@ slideware.
 |-----------|-------|--------|
 | **M1** | Repo scaffold + crypto core (AES-256-GCM, Shamir 3-of-5, tests, CLI) | ✅ done |
 | **M2** | Release-time gate, hash-chained audit log, JWT roles, FastAPI endpoints | ✅ done |
-| M3 | DCT watermark embed/extract/trace + JPEG-robustness test | ⏳ |
+| **M3** | DCT watermark embed/extract/trace + JPEG-robustness test | ✅ done |
 | M4 | Frontend scaffold + 4 role dashboards wired to backend | ⏳ |
 | M5 | Hero visuals: forensic leak-trace reveal + time-lock vault | ⏳ |
 | M6 | Seed data, one-command demo script, README, architecture diagram | ⏳ |
@@ -70,8 +70,9 @@ pip install -r requirements.txt
 
 ```bash
 cd backend
-python -m cli.crypto_demo   # M1: encrypt -> split -> 3-of-5 reconstruct, 2 blocked
-python -m cli.api_demo      # M2: time gate holds 3 shares; release; audit tamper caught
+python -m cli.crypto_demo     # M1: encrypt -> split -> 3-of-5 reconstruct, 2 blocked
+python -m cli.api_demo        # M2: time gate holds 3 shares; release; audit tamper caught
+python -m cli.watermark_demo  # M3: watermark a copy, JPEG-leak it, trace to the candidate
 ```
 
 `crypto_demo` is a real run: a paper is encrypted, the key is split into 5
@@ -82,6 +83,12 @@ custodian shares, **3 shares reconstruct the key and decrypt the paper**, and
 submitted but the **server-enforced time gate** keeps the vault sealed; a second
 exam whose release time has passed unlocks and serves a candidate; then one
 audit row is edited in the DB and the **SHA-256 hash chain detects the break**.
+
+`watermark_demo` renders the paper, issues a uniquely watermarked copy to one
+candidate (PSNR ≈ 36 dB — imperceptible), re-compresses it to a **JPEG quality
+60 "leak", and traces that file back to the exact candidate** (0 bit errors)
+against a 20-name roster. It writes before/after/diff images to `demo_output/`
+so you can confirm the mark is invisible by eye.
 
 ## Run the API server
 
@@ -148,6 +155,7 @@ trace/
 │   │   ├── crypto/     gf256 · shamir · aes_gcm            ← M1 crypto core
 │   │   ├── security/   passwords · tokens(JWT) · deps · keywrap
 │   │   ├── audit/      chain.py  (SHA-256 hash chain)
+│   │   ├── watermark/  core(DCT) · render · trace      ← M3 watermarking
 │   │   ├── services/   exams.py  (seal · unlock ceremony · serve)
 │   │   ├── api/        app.py + routers/ (auth · exams · audit)
 │   │   ├── models.py · schemas.py · db.py · config.py · bootstrap.py
