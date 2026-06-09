@@ -44,6 +44,35 @@ def test_tampering_with_a_field_breaks_the_chain(db_session):
     assert result["first_broken"] == 2
 
 
+def test_chain_is_concurrency_safe(db_session):
+    """Concurrent appenders must not fork the chain.
+
+    The frontend logs every demo identity in in parallel, so many record() calls
+    race on the chain tail. Without serializing the read-modify-write, two would
+    link off the same predecessor and verification would fail. This drives 40
+    record() calls across 12 threads (each with its own session) and asserts the
+    chain stays linear and intact.
+    """
+    import concurrent.futures as cf
+
+    from trace.db import SessionLocal
+
+    def worker(i):
+        db = SessionLocal()
+        try:
+            audit.record(db, actor=f"worker-{i}", action="LOGIN", details={"i": i})
+        finally:
+            db.close()
+
+    with cf.ThreadPoolExecutor(max_workers=12) as ex:
+        list(ex.map(worker, range(40)))
+
+    result = audit.verify_chain(db_session)
+    assert result["count"] == 40
+    assert result["ok"] is True
+    assert result["broken"] == []
+
+
 def test_tampering_with_stored_hash_is_detected(db_session):
     db = db_session
     audit.record(db, actor="admin", action="LOGIN")

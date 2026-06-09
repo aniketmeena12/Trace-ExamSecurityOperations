@@ -53,7 +53,8 @@ slideware.
 | **M1** | Repo scaffold + crypto core (AES-256-GCM, Shamir 3-of-5, tests, CLI) | ✅ done |
 | **M2** | Release-time gate, hash-chained audit log, JWT roles, FastAPI endpoints | ✅ done |
 | **M3** | DCT watermark embed/extract/trace + JPEG-robustness test | ✅ done |
-| M4 | Frontend scaffold + 4 role dashboards wired to backend | ⏳ |
+| **M3.5** | Watermark API wiring (image + trace + registry + custodian share) | ✅ done |
+| **M4** | Frontend scaffold + 4 role dashboards wired to backend | ✅ done |
 | M5 | Hero visuals: forensic leak-trace reveal + time-lock vault | ⏳ |
 | M6 | Seed data, one-command demo script, README, architecture diagram | ⏳ |
 
@@ -101,6 +102,36 @@ uvicorn trace.api.app:app --reload      # http://127.0.0.1:8000
 On first start the DB is created and demo accounts are seeded (passwords are
 dev-only): `admin/admin123`, `investigator/invest123`, `cust1..cust5 /
 custodian1..5`, `cand001/candidate1`.
+
+## Run the frontend (M4)
+
+The dashboards are a dark "security operations center" UI wired to the **real**
+backend (no mock data). Start the API first, then:
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173  (proxies /api -> backend:8000)
+```
+
+All four role dashboards run in one browser; a floating **role-switcher**
+(bottom center) jumps between them instantly — every identity is a real JWT
+session against the backend.
+
+- **Admin** — seal an exam (encrypt + Shamir-split), watch shares distribute,
+  the time gate count down, and the vault open live.
+- **Custodian** — your key share (masked until the release window), a Submit
+  action, and the live quorum ("2 of 3 required shares").
+- **Candidate** — locked countdown before release; after, your own
+  invisibly-watermarked paper image fetched from the backend.
+- **Investigator** — upload a leaked image to trace it to a candidate, and
+  verify the SHA-256 audit hash-chain.
+
+Demo loop: as **Admin** seal an exam set to "+30 sec"; switch to each
+**Custodian** and submit; once 3 are in and the timer hits zero the vault opens;
+as the **Candidate** view and download your watermarked paper; as the
+**Investigator** upload that file to trace it back to the candidate, then Verify
+Integrity on the ledger.
 
 ### Key endpoints
 
@@ -161,7 +192,13 @@ trace/
 │   │   ├── models.py · schemas.py · db.py · config.py · bootstrap.py
 │   ├── tests/          gf256 · shamir · aes_gcm · audit_chain · api
 │   └── cli/            crypto_demo.py · api_demo.py
+├── frontend/           ← M4 React app (Vite + Tailwind + React Query)
+│   └── src/
+│       ├── components/ design system: StatusPill · MonoReadout · Card ·
+│       │               LogView · CountdownTimer · ShareSlots · VaultState
+│       ├── dashboards/ Admin · Custodian · Candidate · Investigator
+│       ├── api/         client.js · hooks.js (React Query, real endpoints)
+│       └── auth/        AuthContext (auto-login + role switching)
 ├── sample_data/        sample_paper.txt
-├── frontend/           (M4)
 └── scripts/            (M6) run_demo.sh
 ```

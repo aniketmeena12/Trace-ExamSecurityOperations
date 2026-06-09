@@ -12,9 +12,18 @@ fixed GENESIS hash.
 
 import hashlib
 import json
+import threading
 
 from ..models import AuditEvent
 from ..util import utcnow
+
+# A hash chain is a read-modify-write on the chain tail: read the last hash,
+# link to it, append. Concurrent requests (e.g. parallel logins) would otherwise
+# read the same tail and fork the chain. This process-global lock serializes the
+# whole critical section through commit, so the tail every appender sees is the
+# last *committed* event. (Single-process deployment; a multi-worker setup would
+# move this to a DB advisory lock / BEGIN IMMEDIATE.)
+_chain_lock = threading.Lock()
 
 GENESIS_HASH = "0" * 64
 
@@ -42,30 +51,35 @@ def _canonical(details) -> str:
 
 
 def record(db, actor: str, action: str, target: str = "", details: dict | None = None):
-    """Append an event to the chain and return it.
+    """Append an event to the chain and commit, atomically and serialized.
 
-    Caller is responsible for committing the surrounding transaction.
+    The lock is held through commit so the next appender reads the just-committed
+    tail (not an uncommitted, soon-to-fork one). Committing here also persists
+    whatever else the caller staged in this transaction (exam rows, share
+    submissions, unlock state) — record() is always the finalizing write.
     """
     details_json = _canonical(details)
-    last = db.query(AuditEvent).order_by(AuditEvent.id.desc()).first()
-    prev_hash = last.hash if last else GENESIS_HASH
     timestamp = utcnow().isoformat()
 
-    event = AuditEvent(
-        timestamp=timestamp,
-        actor=actor,
-        action=action,
-        target=target,
-        details=details_json,
-        prev_hash=prev_hash,
-        hash="",  # filled after we know the autoincrement id
-    )
-    db.add(event)
-    db.flush()  # assigns event.id
-    event.hash = _digest(
-        event.id, timestamp, actor, action, target, details_json, prev_hash
-    )
-    db.flush()
+    with _chain_lock:
+        last = db.query(AuditEvent).order_by(AuditEvent.id.desc()).first()
+        prev_hash = last.hash if last else GENESIS_HASH
+
+        event = AuditEvent(
+            timestamp=timestamp,
+            actor=actor,
+            action=action,
+            target=target,
+            details=details_json,
+            prev_hash=prev_hash,
+            hash="",  # filled after we know the autoincrement id
+        )
+        db.add(event)
+        db.flush()  # assigns event.id
+        event.hash = _digest(
+            event.id, timestamp, actor, action, target, details_json, prev_hash
+        )
+        db.commit()
     return event
 
 
