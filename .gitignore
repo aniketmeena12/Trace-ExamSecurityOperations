@@ -17,6 +17,8 @@ htmlcov/
 *.enc
 *.out
 trace.db
+trace.db-wal
+trace.db-shm
 *.sqlite3
 backend/instance/
 demo_output/
