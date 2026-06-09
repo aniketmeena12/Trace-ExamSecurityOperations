@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ..bootstrap import bootstrap
 from ..config import settings
-from .routers import audit_routes, auth, exams
+from .routers import audit_routes, auth, exams, investigator
 
 
 @asynccontextmanager
@@ -34,6 +34,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router)
     app.include_router(exams.router)
+    app.include_router(investigator.router)
     app.include_router(audit_routes.router)
 
     @app.get("/health", tags=["meta"])

@@ -74,6 +74,36 @@ class PaperOut(BaseModel):
     content: str
 
 
+class MyShareOut(BaseModel):
+    exam_id: int
+    custodian: str
+    x: int
+    share: str | None = None  # "xx:hex…" once the window is open, else null
+    masked: bool
+    window_open: bool
+    submitted: bool
+    status: str
+    release_time: str
+    seconds_remaining: float
+
+
+# ---- watermark / trace ---------------------------------------------------
+class TraceMatch(BaseModel):
+    center_id: str
+    candidate_id: str
+    exam_id: int | None = None
+    username: str | None = None
+
+
+class TraceOut(BaseModel):
+    watermark_present: bool
+    magic_hd: int
+    extracted_fingerprint: str
+    match: TraceMatch | None = None
+    bit_distance: int | None = None
+    confidence: float
+
+
 # ---- audit ---------------------------------------------------------------
 class AuditEventOut(BaseModel):
     id: int

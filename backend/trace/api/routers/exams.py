@@ -3,7 +3,7 @@
 from datetime import timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from ...db import get_db
@@ -12,12 +12,16 @@ from ...models import (
     ROLE_CANDIDATE,
     ROLE_CUSTODIAN,
     ROLE_INVESTIGATOR,
+    CustodianShare,
     Exam,
+    ShareSubmission,
     User,
 )
-from ...schemas import ExamCreate, ExamOut, PaperOut, UnlockStatusOut
+from ...crypto.shamir import Share
+from ...schemas import ExamCreate, ExamOut, MyShareOut, PaperOut, UnlockStatusOut
 from ...security.deps import get_current_user, require_role
 from ...services import exams as exam_service
+from ...services import watermarking as wm_service
 from ...services.exams import UnlockError
 from ...util import utcnow
 
@@ -128,16 +132,107 @@ def submit_share(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=e.message)
 
 
+@router.get("/{exam_id}/my-share", response_model=MyShareOut)
+def my_share(
+    exam_id: int,
+    db: Session = Depends(get_db),
+    custodian: User = Depends(require_role(ROLE_CUSTODIAN)),
+):
+    """This custodian's escrowed share, revealed only once the window is open.
+
+    The actual share bytes are masked until `release_time` has passed — before
+    that the custodian can see *that* they hold a share (and its x-coordinate)
+    but not its value.
+    """
+    exam = _get_exam_or_404(db, exam_id)
+    cs = (
+        db.query(CustodianShare)
+        .filter_by(exam_id=exam.id, custodian_id=custodian.id)
+        .first()
+    )
+    if cs is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a custodian for this exam.",
+        )
+    st = exam_service.unlock_status(db, exam)
+    window_open = not st["time_locked"]
+    submitted = (
+        db.query(ShareSubmission)
+        .filter_by(exam_id=exam.id, custodian_id=custodian.id)
+        .first()
+        is not None
+    )
+    return MyShareOut(
+        exam_id=exam.id,
+        custodian=custodian.username,
+        x=cs.x,
+        share=Share(cs.x, cs.y).to_hex() if window_open else None,
+        masked=not window_open,
+        window_open=window_open,
+        submitted=submitted,
+        status=exam.status,
+        release_time=st["release_time"],
+        seconds_remaining=st["seconds_remaining"],
+    )
+
+
 @router.get("/{exam_id}/paper", response_model=PaperOut)
 def get_paper(
     exam_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(ROLE_CANDIDATE, ROLE_ADMIN, ROLE_INVESTIGATOR)),
 ):
-    """Serve the released paper text (post-unlock only). M3 adds watermarking."""
+    """Serve the released paper text (post-unlock only)."""
     exam = _get_exam_or_404(db, exam_id)
     try:
         content = exam_service.get_paper_plaintext(db, exam, user)
     except UnlockError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=e.message)
     return PaperOut(exam_id=exam.id, name=exam.name, subject=exam.subject, content=content)
+
+
+@router.get("/{exam_id}/paper/image")
+def get_paper_image(
+    exam_id: int,
+    candidate_username: str | None = Query(
+        default=None, description="Admin only: preview a specific candidate's copy."
+    ),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_CANDIDATE, ROLE_ADMIN)),
+):
+    """Per-candidate invisible-watermarked paper as a PNG (post-unlock only).
+
+    Candidates always get their own copy; an admin may preview a named
+    candidate's copy. Each issuance registers the fingerprint for tracing.
+    """
+    exam = _get_exam_or_404(db, exam_id)
+
+    if user.role == ROLE_CANDIDATE:
+        target = user
+    else:  # admin preview
+        if not candidate_username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="candidate_username is required for admin preview.",
+            )
+        target = db.query(User).filter_by(username=candidate_username).first()
+        if target is None or target.role != ROLE_CANDIDATE:
+            raise HTTPException(status_code=404, detail="Candidate not found.")
+
+    candidate_code = target.candidate_code or target.username
+    try:
+        png_bytes, fp_hex = wm_service.issue_paper_image(
+            db, exam, username=target.username, candidate_code=candidate_code
+        )
+    except UnlockError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=e.message)
+
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={
+            "X-Trace-Fingerprint": fp_hex,
+            "Cache-Control": "no-store",
+        },
+    )

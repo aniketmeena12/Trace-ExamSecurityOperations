@@ -106,6 +106,27 @@ class ShareSubmission(Base):
     submitted_at = Column(DateTime, nullable=False)
 
 
+class IssuedWatermark(Base):
+    """Registry of every watermarked copy handed out: fingerprint -> source.
+
+    Populated when a candidate fetches their watermarked paper image; queried by
+    the investigator's trace endpoint to name the exact source of a leak.
+    fingerprint is stored as a 16-hex-char string (64-bit) to avoid SQLite's
+    signed-integer range limits.
+    """
+
+    __tablename__ = "issued_watermarks"
+    __table_args__ = (UniqueConstraint("exam_id", "username"),)
+
+    id = Column(Integer, primary_key=True)
+    exam_id = Column(Integer, ForeignKey("exams.id"), nullable=False, index=True)
+    username = Column(String, nullable=False)
+    fingerprint = Column(String, nullable=False, index=True)
+    center_id = Column(String, nullable=False)
+    candidate_code = Column(String, nullable=False)
+    issued_at = Column(DateTime, nullable=False)
+
+
 class AuditEvent(Base):
     """Append-only, SHA-256 hash-chained audit record.
 

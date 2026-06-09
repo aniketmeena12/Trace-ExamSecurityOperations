@@ -231,20 +231,25 @@ def _attempt_unlock(db: Session, exam: Exam, actor: str) -> dict:
     return unlock_status(db, exam)
 
 
-def get_paper_plaintext(db: Session, exam: Exam, requester: User) -> str:
-    """Return the decrypted paper text (post-release only). Audited as access.
+def decrypt_paper_text(exam: Exam) -> str:
+    """Decrypt the paper to text (post-release only). No audit side effect.
 
-    M3 will layer per-candidate watermarking on top of this plaintext.
+    Shared by the plaintext endpoint and the per-candidate watermark renderer.
     """
     if exam.status != STATUS_UNLOCKED or exam.released_key_wrapped is None:
         raise UnlockError("SEALED", "This paper has not been released yet.")
-
     key = keywrap.unwrap_key(exam.released_key_wrapped)
     plaintext = aes_gcm.decrypt(
         aes_gcm.Ciphertext(exam.nonce, exam.tag, exam.ciphertext),
         key,
         aad=exam.aad.encode(),
     )
+    return plaintext.decode("utf-8")
+
+
+def get_paper_plaintext(db: Session, exam: Exam, requester: User) -> str:
+    """Return the decrypted paper text (post-release only). Audited as access."""
+    text = decrypt_paper_text(exam)
     audit.record(
         db,
         actor=requester.username,
@@ -257,4 +262,4 @@ def get_paper_plaintext(db: Session, exam: Exam, requester: User) -> str:
         },
     )
     db.commit()
-    return plaintext.decode("utf-8")
+    return text
