@@ -28,16 +28,20 @@ export function AuthProvider({ children }) {
     let cancelled = false;
     (async () => {
       try {
-        const entries = await Promise.all(
-          IDENTITIES.map(async (id) => {
-            const { access_token } = await api.login(id.username, id.password);
-            const me = await api.get("/auth/me", access_token);
-            return [id.username, { ...id, token: access_token, me }];
-          })
-        );
-        if (cancelled) return;
-        setSessions(Object.fromEntries(entries));
-        setStatus("ready");
+        // Log identities in sequentially: avoids a thundering herd of parallel
+        // auth requests against the dev server, and makes StrictMode's double
+        // mount harmless. Each session is published as it completes so the UI
+        // can render the active dashboard without waiting for all nine.
+        for (const id of IDENTITIES) {
+          const { access_token } = await api.login(id.username, id.password);
+          const me = await api.get("/auth/me", access_token);
+          if (cancelled) return;
+          setSessions((prev) => ({
+            ...prev,
+            [id.username]: { ...id, token: access_token, me },
+          }));
+          if (status !== "ready") setStatus("ready");
+        }
       } catch (e) {
         if (cancelled) return;
         setError(e);
@@ -47,6 +51,7 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const value = useMemo(() => {
