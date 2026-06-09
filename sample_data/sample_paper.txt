@@ -1,0 +1,33 @@
+================================================================
+   CONFIDENTIAL — DO NOT OPEN BEFORE EXAM START
+   Board of Secondary Examinations — Trace Demo
+================================================================
+Subject: Physics (PHY-2026)        Session: Morning (AM)
+Center:  DEL-01                     Total Marks: 100
+Time:    3 hours
+----------------------------------------------------------------
+
+SECTION A  (Answer all questions — 2 marks each)
+
+Q1.  State the dimensional formula of the gravitational constant G.
+
+Q2.  A finite field GF(256) is defined by the irreducible polynomial
+     x^8 + x^4 + x^3 + x + 1. How many nonzero elements does it have?
+
+Q3.  Define the half-life of a radioactive sample.
+
+SECTION B  (Answer any three — 10 marks each)
+
+Q4.  Derive the expression for the electric field on the axis of a
+     uniformly charged ring.
+
+Q5.  Explain Shamir's threshold scheme and why any (k-1) shares of a
+     k-of-n split reveal no information about the secret.
+
+Q6.  A 256-bit key is encrypted into an exam vault and split across
+     five custodians (3-of-5). Argue why no single insider can leak
+     the paper before the scheduled release time.
+
+----------------------------------------------------------------
+                        END OF PAPER
+================================================================

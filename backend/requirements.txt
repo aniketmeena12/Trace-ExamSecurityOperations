@@ -1,0 +1,7 @@
+# Trace backend dependencies (grows per milestone).
+# M1 — crypto core:
+pycryptodome>=3.20.0
+pytest>=8.0
+
+# M2 (planned): fastapi, uvicorn[standard], sqlalchemy, python-jose[cryptography], passlib[bcrypt], python-multipart
+# M3 (planned): opencv-python, numpy, pillow
