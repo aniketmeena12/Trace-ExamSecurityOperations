@@ -6,11 +6,12 @@ import {
   MonoReadout,
   SectionLabel,
   StatusPill,
+  inputCls,
 } from "../components/primitives";
 import { PageHeader } from "../components/PageHeader";
 import { Icon } from "../components/Icon";
 import { LogView } from "../components/LogView";
-import { useAudit, useTrace, useVerifyChain } from "../api/hooks";
+import { useAudit, useLeakMatch, useTrace, useVerifyChain } from "../api/hooks";
 
 function TraceResult({ result }) {
   if (!result) return null;
@@ -166,6 +167,116 @@ function TracePanel() {
   );
 }
 
+function LeakMatchResult({ result }) {
+  if (!result) return null;
+  if (!result.matched_questions.length) {
+    return (
+      <div className="rounded-xl border border-warn/30 bg-warn/5 p-4">
+        <StatusPill tone="pending">no bank question matched</StatusPill>
+        <p className="mt-2 text-sm text-muted">{result.note}</p>
+      </div>
+    );
+  }
+  const prime = result.suspects.filter((s) => s.has_all);
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col gap-4 rounded-xl border border-danger/40 bg-danger/5 p-4 shadow-glow-danger"
+    >
+      <div className="flex items-center justify-between">
+        <StatusPill tone="denied" pulse>
+          {result.matched_questions.length} question(s) matched
+        </StatusPill>
+        <span className="mono text-xs text-faint">{result.leaked_chars} chars analysed</span>
+      </div>
+      <p className="text-sm text-ink">{result.note}</p>
+
+      <div>
+        <SectionLabel>matched questions</SectionLabel>
+        <div className="flex flex-col gap-1.5">
+          {result.matched_questions.map((q) => (
+            <div
+              key={q.question_id}
+              className="flex items-center justify-between gap-3 rounded-lg border border-line bg-base/40 px-3 py-2"
+            >
+              <span className="min-w-0 flex-1 truncate text-sm text-muted">
+                <span className="mono text-faint">#{q.question_id}</span> {q.prompt_preview}
+              </span>
+              <span className="mono text-xs text-danger">
+                {Math.round(q.containment * 100)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <SectionLabel>
+          {prime.length ? "prime suspects (received every leaked question)" : "candidates with overlap"}
+        </SectionLabel>
+        <div className="flex flex-col gap-1.5">
+          {(prime.length ? prime : result.suspects).slice(0, 8).map((s) => (
+            <div
+              key={`${s.exam_id}:${s.username}`}
+              className="flex items-center justify-between gap-3 rounded-lg border border-danger/20 bg-danger/[0.04] px-3 py-2"
+            >
+              <span className="mono text-sm font-semibold text-danger">{s.candidate_code}</span>
+              <span className="mono text-[11px] text-muted">
+                {s.username} · exam #{s.exam_id} · {s.matched_of_leak} hit(s)
+                {s.fingerprint ? ` · fp ${s.fingerprint}` : ""}
+              </span>
+            </div>
+          ))}
+          {!result.suspects.length && (
+            <p className="text-xs text-faint">no issued paper contained these questions yet.</p>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function LeakMatchPanel() {
+  const match = useLeakMatch();
+  const [text, setText] = useState("");
+  return (
+    <Card
+      title="Leak-Match Detector"
+      subtitle="paste suspected leaked text · match to bank · narrow the source"
+      icon="scan"
+      iconTone={match.data?.matched_questions?.length ? "denied" : "royal"}
+      tone={match.data?.matched_questions?.length ? "denied" : undefined}
+    >
+      <div className="flex flex-col gap-3">
+        <textarea
+          rows={4}
+          className={`${inputCls} resize-none font-mono text-xs`}
+          placeholder="Paste a question or whole paper circulating on chat / social…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-1.5 text-[11px] text-faint">
+            <Icon name="layers" size={13} className="text-royal" />
+            matches against the encrypted bank · intersects per-candidate selections
+          </span>
+          <Button
+            tone="danger"
+            icon="crosshair"
+            loading={match.isPending}
+            onClick={() => text.trim() && match.mutate(text)}
+          >
+            Match Leak
+          </Button>
+        </div>
+        {match.isError && <p className="text-xs text-danger">{match.error.message}</p>}
+        <LeakMatchResult result={match.data} />
+      </div>
+    </Card>
+  );
+}
+
 function AuditLedger() {
   const { data: events } = useAudit();
   const verify = useVerifyChain();
@@ -232,6 +343,7 @@ export function InvestigatorDashboard() {
         title="Forensics Console"
         subtitle="Trace leaked papers to their source and verify the tamper-evident audit chain."
       />
+      <LeakMatchPanel />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <TracePanel />
         <AuditLedger />

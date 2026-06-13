@@ -127,6 +127,36 @@ class MyShareOut(BaseModel):
     seconds_remaining: float
 
 
+# ---- leak-match detector (text leaks) ------------------------------------
+class LeakMatchIn(BaseModel):
+    text: str = Field(min_length=1, description="Suspected leaked text to match.")
+
+
+class MatchedQuestion(BaseModel):
+    question_id: int
+    subject: str
+    topic: str
+    difficulty: str
+    containment: float
+    prompt_preview: str
+
+
+class LeakSuspect(BaseModel):
+    username: str
+    candidate_code: str
+    exam_id: int
+    matched_of_leak: int
+    has_all: bool
+    fingerprint: str | None = None
+
+
+class LeakMatchOut(BaseModel):
+    leaked_chars: int
+    matched_questions: list[MatchedQuestion]
+    suspects: list[LeakSuspect]
+    note: str
+
+
 # ---- watermark / trace ---------------------------------------------------
 class TraceMatch(BaseModel):
     center_id: str

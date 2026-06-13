@@ -39,6 +39,7 @@ LEAK_TRACED = "LEAK_TRACED"
 AUDIT_VERIFIED = "AUDIT_VERIFIED"
 QUESTION_ADDED = "QUESTION_ADDED"
 PAPER_ASSEMBLED = "PAPER_ASSEMBLED"
+LEAK_MATCHED = "LEAK_MATCHED"
 
 
 def _digest(seq, timestamp, actor, action, target, details_json, prev_hash) -> str:

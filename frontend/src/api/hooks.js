@@ -122,3 +122,12 @@ export function useTrace() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["audit"] }),
   });
 }
+
+export function useLeakMatch() {
+  const { token } = useActive();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (text) => api.post("/investigator/match", token, { text }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["audit"] }),
+  });
+}
