@@ -7,6 +7,8 @@ import {
   SectionLabel,
   StatusPill,
 } from "../components/primitives";
+import { PageHeader } from "../components/PageHeader";
+import { Icon } from "../components/Icon";
 import { LogView } from "../components/LogView";
 import { useAudit, useTrace, useVerifyChain } from "../api/hooks";
 
@@ -14,7 +16,7 @@ function TraceResult({ result }) {
   if (!result) return null;
   if (!result.watermark_present) {
     return (
-      <div className="rounded-lg border border-warn/30 bg-warn/5 p-4">
+      <div className="rounded-xl border border-warn/30 bg-warn/5 p-4">
         <StatusPill tone="pending">no watermark detected</StatusPill>
         <p className="mt-2 text-sm text-muted">
           This image carries no recoverable Trace fingerprint
@@ -29,7 +31,7 @@ function TraceResult({ result }) {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-lg border border-danger/40 bg-danger/5 p-4 shadow-glow-danger"
+      className="rounded-xl border border-danger/40 bg-danger/5 p-4 shadow-glow-danger"
     >
       <div className="flex items-center justify-between">
         <StatusPill tone="denied" pulse>
@@ -41,9 +43,7 @@ function TraceResult({ result }) {
       </div>
 
       <div className="mt-4 flex items-baseline gap-3">
-        <span className="text-xs uppercase tracking-widest text-faint">
-          traced to
-        </span>
+        <span className="kicker">traced to</span>
         <span className="mono text-2xl font-bold text-danger">
           {m ? m.candidate_id : "—"}
         </span>
@@ -61,9 +61,7 @@ function TraceResult({ result }) {
           tone="danger"
         />
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-medium uppercase tracking-widest text-faint">
-            match confidence
-          </span>
+          <span className="kicker">match confidence</span>
           <div className="flex items-center gap-2">
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-line">
               <motion.div
@@ -98,6 +96,8 @@ function TracePanel() {
     <Card
       title="Forensic Trace"
       subtitle="upload a leaked image · recover its fingerprint"
+      icon="crosshair"
+      iconTone={trace.data?.watermark_present ? "denied" : "royal"}
       tone={trace.data?.watermark_present ? "denied" : undefined}
     >
       <div className="flex flex-col gap-4">
@@ -113,13 +113,13 @@ function TracePanel() {
             pick(e.dataTransfer.files?.[0]);
           }}
           onClick={() => inputRef.current?.click()}
-          className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center transition-colors ${
-            dragging
-              ? "border-accent bg-accent/5"
-              : "border-line hover:border-faint"
+          className={`relative flex cursor-pointer flex-col items-center justify-center gap-3 overflow-hidden rounded-xl border border-dashed px-4 py-9 text-center transition-colors ${
+            dragging ? "border-accent bg-accent/5" : "border-line hover:border-faint"
           }`}
         >
-          <span className="text-3xl">◎</span>
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-royal/30 bg-royal/10 text-royal">
+            <Icon name="upload" size={22} />
+          </span>
           <span className="text-sm text-muted">
             Drop a leaked image here, or click to browse
           </span>
@@ -134,7 +134,7 @@ function TracePanel() {
         </div>
 
         {preview && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 rounded-xl border border-line bg-base/40 p-3">
             <img
               src={preview}
               alt="evidence"
@@ -149,6 +149,7 @@ function TracePanel() {
             <Button
               tone="danger"
               loading={trace.isPending}
+              icon="scan"
               onClick={() => trace.mutate(file)}
             >
               Run Trace
@@ -176,11 +177,14 @@ function AuditLedger() {
     <Card
       title="Audit Ledger"
       subtitle="append-only SHA-256 hash chain"
+      icon="hash"
+      iconTone={tone || "idle"}
       tone={tone}
       right={
         <Button
           tone={result && !result.ok ? "danger" : "verify"}
           loading={verify.isPending}
+          icon="shieldCheck"
           onClick={() => verify.mutate()}
         >
           Verify Integrity
@@ -192,7 +196,7 @@ function AuditLedger() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
+            className={`flex items-center justify-between rounded-xl border px-3 py-2 ${
               result.ok
                 ? "border-verify/30 bg-verify/5"
                 : "border-danger/40 bg-danger/5"
@@ -222,13 +226,12 @@ function AuditLedger() {
 export function InvestigatorDashboard() {
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-bold text-ink">Forensics Console</h1>
-        <p className="text-sm text-muted">
-          Trace leaked papers to their source and verify the tamper-evident
-          audit chain.
-        </p>
-      </div>
+      <PageHeader
+        icon="crosshair"
+        iconTone="royal"
+        title="Forensics Console"
+        subtitle="Trace leaked papers to their source and verify the tamper-evident audit chain."
+      />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <TracePanel />
         <AuditLedger />

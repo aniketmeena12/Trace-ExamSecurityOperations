@@ -54,6 +54,26 @@ export function usePaperImage(examId, enabled) {
   });
 }
 
+export function useQuestions(subject) {
+  const { token, username } = useActive();
+  return useQuery({
+    queryKey: ["questions", subject, username],
+    queryFn: () =>
+      api.get(`/questions${subject ? `?subject=${encodeURIComponent(subject)}` : ""}`, token),
+    enabled: !!token,
+  });
+}
+
+export function useBlueprint(examId, enabled = true) {
+  const { token, username } = useActive();
+  return useQuery({
+    queryKey: ["blueprint", examId, username],
+    queryFn: () => api.get(`/exams/${examId}/blueprint`, token),
+    enabled: !!token && !!examId && enabled,
+    retry: false,
+  });
+}
+
 export function useAudit() {
   const { token, username } = useActive();
   return useQuery({

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from .. import audit
 from ..crypto import aes_gcm, shamir
 from ..models import (
+    ASSEMBLY_STATIC,
     STATUS_SEALED,
     STATUS_UNLOCKED,
     CustodianShare,
@@ -45,8 +46,16 @@ def seal_exam(
     release_time: datetime,
     threshold_k: int,
     custodians: list[User],
+    assembly_mode: str = ASSEMBLY_STATIC,
+    blueprint: str | None = None,
 ) -> Exam:
-    """Encrypt the paper, split its key across custodians, and persist (SEALED)."""
+    """Encrypt the paper, split its key across custodians, and persist (SEALED).
+
+    For a static exam, `paper_text` is the whole paper. For a dynamic exam it is
+    the assembly manifest (blueprint + pool ids); the per-candidate papers are
+    assembled later from the encrypted question bank. Either way a single AES key
+    is generated, Shamir-split, and never stored whole.
+    """
     n = len(custodians)
     if not (1 <= threshold_k <= n <= 255):
         raise ValueError("require 1 <= threshold_k <= number_of_custodians <= 255")
@@ -69,6 +78,8 @@ def seal_exam(
         status=STATUS_SEALED,
         created_by=admin.id,
         created_at=utcnow(),
+        assembly_mode=assembly_mode,
+        blueprint=blueprint,
     )
     db.add(exam)
     db.flush()  # assign exam.id
@@ -96,6 +107,7 @@ def seal_exam(
             "center_id": center_id,
             "threshold": f"{threshold_k}-of-{n}",
             "release_time": release_time.isoformat(),
+            "assembly_mode": assembly_mode,
         },
     )
     db.commit()

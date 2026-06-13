@@ -2,29 +2,42 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Card,
+  Metric,
   MonoReadout,
   SectionLabel,
   StatusPill,
+  inputCls,
 } from "../components/primitives";
+import { PageHeader } from "../components/PageHeader";
+import { Icon } from "../components/Icon";
 import { CountdownTimer } from "../components/CountdownTimer";
 import { ShareSlots } from "../components/ShareSlots";
 import { VaultState } from "../components/VaultState";
-import { useCreateExam, useExams, useUnlockStatus } from "../api/hooks";
+import {
+  useBlueprint,
+  useCreateExam,
+  useExams,
+  useQuestions,
+  useUnlockStatus,
+} from "../api/hooks";
+
+// Matches the seeded MATH-DEMO bank (algebra-easy ×5, geometry-hard ×5).
+const DEMO_BLUEPRINT = {
+  sections: [
+    { name: "A", topic: "algebra", difficulty: "easy", count: 3 },
+    { name: "B", topic: "geometry", difficulty: "hard", count: 2 },
+  ],
+};
 
 function Field({ label, children, hint }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-[10px] font-medium uppercase tracking-widest text-faint">
-        {label}
-      </span>
+      <span className="kicker">{label}</span>
       {children}
       {hint && <span className="text-[11px] text-faint">{hint}</span>}
     </label>
   );
 }
-
-const inputCls =
-  "rounded-lg border border-line bg-base/70 px-3 py-2 text-sm text-ink outline-none focus:border-accent/50 focus:shadow-glow placeholder:text-faint";
 
 const RELEASE_PRESETS = [
   { label: "Already open", value: -5 },
@@ -33,8 +46,35 @@ const RELEASE_PRESETS = [
   { label: "+1 hour", value: 3600 },
 ];
 
+function ModeToggle({ mode, onChange }) {
+  const opts = [
+    { key: "static", label: "Static paper", icon: "lock" },
+    { key: "dynamic", label: "Dynamic bank", icon: "layers" },
+  ];
+  return (
+    <div className="flex gap-2">
+      {opts.map((o) => (
+        <button
+          type="button"
+          key={o.key}
+          onClick={() => onChange(o.key)}
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors ${
+            mode === o.key
+              ? "border-accent/50 bg-accent/10 text-accent"
+              : "border-line text-muted hover:text-ink"
+          }`}
+        >
+          <Icon name={o.icon} size={13} />
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function SealForm({ onCreated }) {
   const create = useCreateExam();
+  const [mode, setMode] = useState("static");
   const [form, setForm] = useState({
     name: "PHY-2026-AM",
     subject: "Physics",
@@ -43,8 +83,21 @@ function SealForm({ onCreated }) {
     release_offset_seconds: 30,
     paper_text: "",
   });
-  const set = (k) => (e) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [blueprintText, setBlueprintText] = useState(
+    JSON.stringify(DEMO_BLUEPRINT, null, 2)
+  );
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Switching to dynamic defaults the subject to the seeded demo bank.
+  const pickMode = (m) => {
+    setMode(m);
+    if (m === "dynamic" && form.subject === "Physics") {
+      setForm((f) => ({ ...f, subject: "MATH-DEMO", name: "MATH-2026-AM" }));
+    }
+  };
+
+  const bankSubject = mode === "dynamic" ? form.subject : null;
+  const { data: bank } = useQuestions(bankSubject);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -54,15 +107,33 @@ function SealForm({ onCreated }) {
       center_id: form.center_id,
       threshold_k: Number(form.threshold_k),
       release_offset_seconds: Number(form.release_offset_seconds),
+      assembly_mode: mode,
     };
-    if (form.paper_text.trim()) body.paper_text = form.paper_text;
+    if (mode === "dynamic") {
+      try {
+        body.blueprint = JSON.parse(blueprintText);
+      } catch {
+        create.reset?.();
+        alert("Blueprint is not valid JSON.");
+        return;
+      }
+    } else if (form.paper_text.trim()) {
+      body.paper_text = form.paper_text;
+    }
     const exam = await create.mutateAsync(body);
     onCreated(exam.id);
   };
 
   return (
-    <Card title="Seal a New Exam" subtitle="encrypt · split key · distribute to custodians">
+    <Card
+      title="Seal a New Exam"
+      subtitle="encrypt · split key · distribute to custodians"
+      icon="lock"
+      iconTone="secure"
+    >
       <form onSubmit={submit} className="flex flex-col gap-4">
+        <ModeToggle mode={mode} onChange={pickMode} />
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="Exam name">
             <input className={inputCls} value={form.name} onChange={set("name")} />
@@ -115,22 +186,41 @@ function SealForm({ onCreated }) {
           </div>
         </Field>
 
-        <Field label="Paper content" hint="leave blank to use the seeded sample paper">
-          <textarea
-            rows={4}
-            className={`${inputCls} resize-none font-mono text-xs`}
-            placeholder="(using seeded sample paper)"
-            value={form.paper_text}
-            onChange={set("paper_text")}
-          />
-        </Field>
+        {mode === "static" ? (
+          <Field label="Paper content" hint="leave blank to use the seeded sample paper">
+            <textarea
+              rows={4}
+              className={`${inputCls} resize-none font-mono text-xs`}
+              placeholder="(using seeded sample paper)"
+              value={form.paper_text}
+              onChange={set("paper_text")}
+            />
+          </Field>
+        ) : (
+          <Field
+            label="Blueprint"
+            hint={`${
+              bank?.length ?? 0
+            } encrypted questions in the "${form.subject}" bank · sections + counts only`}
+          >
+            <textarea
+              rows={7}
+              className={`${inputCls} resize-none font-mono text-[11px] leading-relaxed`}
+              value={blueprintText}
+              onChange={(e) => setBlueprintText(e.target.value)}
+            />
+          </Field>
+        )}
 
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-faint">
-            key → AES-256-GCM · split 3-of-5 · escrowed to cust1…cust5
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-1.5 text-xs text-faint">
+            <Icon name="key" size={13} className="text-accent" />
+            {mode === "dynamic"
+              ? "per-candidate paper assembled at release · selection gated by the exam key"
+              : "AES-256-GCM · split 3-of-5 · escrowed to cust1…cust5"}
           </span>
-          <Button type="submit" loading={create.isPending}>
-            Seal & Distribute
+          <Button tone="solid" type="submit" loading={create.isPending} icon="lock">
+            Seal &amp; Distribute
           </Button>
         </div>
         {create.isError && (
@@ -150,17 +240,35 @@ function StatusRow({ label, children }) {
   );
 }
 
+function BlueprintStrip({ examId }) {
+  const { data: bp } = useBlueprint(examId);
+  if (!bp || bp.assembly_mode !== "dynamic") return null;
+  return (
+    <div className="rounded-xl border border-royal/30 bg-royal/5 p-3">
+      <div className="flex items-center gap-2">
+        <Icon name="layers" size={14} className="text-royal" />
+        <SectionLabel>dynamic assembly</SectionLabel>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-3">
+        <MonoReadout label="bank pool" value={`${bp.pool_size} questions`} tone="accent" />
+        <MonoReadout label="per candidate" value={`${bp.questions_per_paper} selected`} />
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-faint">
+        Each candidate's paper is assembled at release from the encrypted bank; the
+        selection is seeded by the exam key, so no one can predict it beforehand.
+      </p>
+    </div>
+  );
+}
+
 function OpsPanel({ examId }) {
   const { data: status } = useUnlockStatus(examId, { poll: true });
   const { data: exams } = useExams();
-  const exam = useMemo(
-    () => exams?.find((e) => e.id === examId),
-    [exams, examId]
-  );
+  const exam = useMemo(() => exams?.find((e) => e.id === examId), [exams, examId]);
 
   if (!status || !exam) {
     return (
-      <Card title="Live Operations">
+      <Card title="Live Operations" icon="activity">
         <p className="text-sm text-faint">Select or seal an exam to monitor.</p>
       </Card>
     );
@@ -177,6 +285,8 @@ function OpsPanel({ examId }) {
     <Card
       title="Live Operations"
       subtitle={`${exam.name} · ${exam.subject}`}
+      icon="activity"
+      iconTone={tone}
       tone={tone}
       right={<StatusPill tone={tone}>{status.status}</StatusPill>}
     >
@@ -187,6 +297,32 @@ function OpsPanel({ examId }) {
           sharesSubmitted={status.shares_submitted}
           threshold={status.threshold_k}
         />
+
+        <div className="grid grid-cols-3 gap-3">
+          <Metric
+            label="quorum"
+            value={`${status.shares_submitted}/${status.threshold_k}`}
+            sub={`of ${status.num_custodians_n} custodians`}
+            tone="accent"
+            icon="users"
+          />
+          <Metric
+            label="encryption"
+            value="GCM"
+            sub="AES-256"
+            tone="verify"
+            icon="shieldCheck"
+          />
+          <Metric
+            label="status"
+            value={status.time_locked ? "LOCKED" : "OPEN"}
+            sub="time gate"
+            tone={status.time_locked ? "danger" : "verify"}
+            icon="clock"
+          />
+        </div>
+
+        {exam.assembly_mode === "dynamic" && <BlueprintStrip examId={examId} />}
 
         <div>
           <SectionLabel>custodian shares</SectionLabel>
@@ -200,7 +336,7 @@ function OpsPanel({ examId }) {
         <div>
           <SectionLabel>telemetry</SectionLabel>
           <StatusRow label="Paper encryption">
-            <StatusPill tone="secure">AES-256-GCM ✓</StatusPill>
+            <StatusPill tone="secure">AES-256-GCM</StatusPill>
           </StatusRow>
           <StatusRow label="Shares distributed">
             <span className="mono text-sm text-accent">
@@ -242,22 +378,33 @@ function OpsPanel({ examId }) {
 function ExamList({ examId, onSelect }) {
   const { data: exams } = useExams();
   return (
-    <Card title="Exams" subtitle={`${exams?.length || 0} sealed`}>
+    <Card title="Exams" subtitle={`${exams?.length || 0} sealed`} icon="database">
       <div className="flex flex-col gap-1.5">
         {(exams || []).map((e) => (
           <button
             key={e.id}
             onClick={() => onSelect(e.id)}
-            className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors ${
+            className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-left transition-colors ${
               e.id === examId
                 ? "border-accent/40 bg-accent/5"
-                : "border-line hover:border-faint"
+                : "border-line hover:border-faint hover:bg-white/[0.015]"
             }`}
           >
-            <div>
-              <div className="text-sm font-medium text-ink">{e.name}</div>
-              <div className="mono text-[11px] text-faint">
-                #{e.id} · {e.center_id}
+            <div className="flex items-center gap-3">
+              <span
+                className={`flex h-8 w-8 items-center justify-center rounded-lg border ${
+                  e.status === "UNLOCKED"
+                    ? "border-accent/30 bg-accent/10 text-accent"
+                    : "border-danger/30 bg-danger/10 text-danger"
+                }`}
+              >
+                <Icon name={e.status === "UNLOCKED" ? "unlock" : "lock"} size={15} />
+              </span>
+              <div>
+                <div className="text-sm font-medium text-ink">{e.name}</div>
+                <div className="mono text-[11px] text-faint">
+                  #{e.id} · {e.center_id}
+                </div>
               </div>
             </div>
             <StatusPill tone={e.status === "UNLOCKED" ? "secure" : "denied"}>
@@ -266,9 +413,7 @@ function ExamList({ examId, onSelect }) {
           </button>
         ))}
         {(!exams || exams.length === 0) && (
-          <p className="py-3 text-center text-xs text-faint">
-            no exams sealed yet
-          </p>
+          <p className="py-3 text-center text-xs text-faint">no exams sealed yet</p>
         )}
       </div>
     </Card>
@@ -288,14 +433,12 @@ export function AdminDashboard() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-ink">Control Room</h1>
-          <p className="text-sm text-muted">
-            Seal exams, distribute key shares, and monitor the vault in real time.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        icon="gauge"
+        title="Control Room"
+        subtitle="Seal exams, distribute key shares, and monitor the vault in real time."
+        right={<StatusPill tone="secure">{exams?.length || 0} exams</StatusPill>}
+      />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="flex flex-col gap-6">
           <SealForm onCreated={setExamId} />

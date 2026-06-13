@@ -33,3 +33,6 @@ frontend/.vite/
 .idea/
 .vscode/
 *.swp
+
+# Claude Code local tooling (skills library, session settings)
+.claude/

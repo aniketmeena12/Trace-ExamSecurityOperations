@@ -1,5 +1,6 @@
 """Exam endpoints: seal, list, inspect, custodian unlock ceremony, serve paper."""
 
+import json
 from datetime import timedelta
 from pathlib import Path
 
@@ -8,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from ...db import get_db
 from ...models import (
+    ASSEMBLY_DYNAMIC,
+    ASSEMBLY_STATIC,
     ROLE_ADMIN,
     ROLE_CANDIDATE,
     ROLE_CUSTODIAN,
@@ -18,8 +21,16 @@ from ...models import (
     User,
 )
 from ...crypto.shamir import Share
-from ...schemas import ExamCreate, ExamOut, MyShareOut, PaperOut, UnlockStatusOut
+from ...schemas import (
+    BlueprintOut,
+    ExamCreate,
+    ExamOut,
+    MyShareOut,
+    PaperOut,
+    UnlockStatusOut,
+)
 from ...security.deps import get_current_user, require_role
+from ...services import assembly as assembly_service
 from ...services import exams as exam_service
 from ...services import watermarking as wm_service
 from ...services.exams import UnlockError
@@ -76,9 +87,28 @@ def create_exam(
             detail=f"threshold_k ({body.threshold_k}) exceeds custodian count ({len(custodians)}).",
         )
 
-    paper_text = body.paper_text
-    if paper_text is None:
-        paper_text = _SAMPLE_PAPER.read_text(encoding="utf-8")
+    # Resolve what gets sealed in the vault.
+    assembly_mode = body.assembly_mode or ASSEMBLY_STATIC
+    blueprint_json = None
+    if assembly_mode == ASSEMBLY_DYNAMIC:
+        if not body.blueprint:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A dynamic exam requires a blueprint.",
+            )
+        try:
+            section_pools = assembly_service.validate_blueprint(
+                db, body.subject, body.blueprint
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        # The vault seals the manifest (blueprint + frozen pools), not a fixed paper.
+        paper_text = assembly_service.manifest_for(body.blueprint, section_pools)
+        blueprint_json = json.dumps(body.blueprint, sort_keys=True, separators=(",", ":"))
+    else:
+        paper_text = body.paper_text
+        if paper_text is None:
+            paper_text = _SAMPLE_PAPER.read_text(encoding="utf-8")
 
     exam = exam_service.seal_exam(
         db,
@@ -90,6 +120,8 @@ def create_exam(
         release_time=release_time,
         threshold_k=body.threshold_k,
         custodians=custodians,
+        assembly_mode=assembly_mode,
+        blueprint=blueprint_json,
     )
     return exam
 
@@ -177,16 +209,63 @@ def my_share(
     )
 
 
+@router.get("/{exam_id}/blueprint", response_model=BlueprintOut)
+def get_blueprint(
+    exam_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    """Structure of a dynamic exam: section counts and pool size, never content.
+
+    Safe to show pre-release — it reveals how many questions a paper has and how
+    big the bank is, but nothing about which questions any candidate will receive.
+    """
+    exam = _get_exam_or_404(db, exam_id)
+    blueprint = json.loads(exam.blueprint) if exam.blueprint else None
+    pool = 0
+    per_paper = 0
+    if blueprint:
+        try:
+            pool = assembly_service.pool_size(
+                assembly_service.validate_blueprint(db, exam.subject, blueprint)
+            )
+            per_paper = sum(s.get("count", 0) for s in blueprint.get("sections", []))
+        except ValueError:
+            pool = 0
+    return BlueprintOut(
+        exam_id=exam.id,
+        assembly_mode=exam.assembly_mode,
+        blueprint=blueprint,
+        pool_size=pool,
+        questions_per_paper=per_paper,
+    )
+
+
 @router.get("/{exam_id}/paper", response_model=PaperOut)
 def get_paper(
     exam_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(ROLE_CANDIDATE, ROLE_ADMIN, ROLE_INVESTIGATOR)),
 ):
-    """Serve the released paper text (post-unlock only)."""
+    """Serve the released paper text (post-unlock only).
+
+    For a dynamic exam the paper is assembled for the requesting candidate; admins
+    and investigators should use the image preview (with candidate_username) since
+    there is no single shared paper.
+    """
     exam = _get_exam_or_404(db, exam_id)
     try:
-        content = exam_service.get_paper_plaintext(db, exam, user)
+        if exam.assembly_mode == ASSEMBLY_DYNAMIC:
+            if user.role != ROLE_CANDIDATE:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Dynamic exam: papers are per-candidate. Use "
+                    "/paper/image?candidate_username=... to preview one.",
+                )
+            code = user.candidate_code or user.username
+            content, _ = assembly_service.assemble_paper_text(
+                db, exam, username=user.username, candidate_code=code
+            )
+        else:
+            content = exam_service.get_paper_plaintext(db, exam, user)
     except UnlockError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=e.message)
     return PaperOut(exam_id=exam.id, name=exam.name, subject=exam.subject, content=content)

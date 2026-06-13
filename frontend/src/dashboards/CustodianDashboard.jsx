@@ -7,6 +7,8 @@ import {
   SectionLabel,
   StatusPill,
 } from "../components/primitives";
+import { PageHeader } from "../components/PageHeader";
+import { Icon } from "../components/Icon";
 import { CountdownTimer } from "../components/CountdownTimer";
 import { ShareSlots } from "../components/ShareSlots";
 import { VaultState } from "../components/VaultState";
@@ -36,16 +38,14 @@ function ShareCard({ examId }) {
 
   if (error) {
     return (
-      <Card title="Your Key Share" tone="idle">
-        <p className="text-sm text-muted">
-          You are not a custodian for this exam.
-        </p>
+      <Card title="Your Key Share" icon="key" tone="idle">
+        <p className="text-sm text-muted">You are not a custodian for this exam.</p>
       </Card>
     );
   }
   if (!share) {
     return (
-      <Card title="Your Key Share">
+      <Card title="Your Key Share" icon="key">
         <p className="text-sm text-faint">Loading…</p>
       </Card>
     );
@@ -57,6 +57,8 @@ function ShareCard({ examId }) {
     <Card
       title="Your Key Share"
       subtitle="one point on the secret polynomial — useless alone"
+      icon="key"
+      iconTone={revealed ? "secure" : "pending"}
       tone={revealed ? "secure" : "pending"}
       right={
         <StatusPill tone={share.masked ? "pending" : "secure"}>
@@ -68,9 +70,7 @@ function ShareCard({ examId }) {
         <div className="grid grid-cols-[auto_1fr] gap-4">
           <MonoReadout label="x-coord" value={share.x} tone="accent" />
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-medium uppercase tracking-widest text-faint">
-              share f(x)
-            </span>
+            <span className="kicker">share f(x)</span>
             {revealed ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <MonoReadout value={share.share} tone="accent" />
@@ -82,26 +82,28 @@ function ShareCard({ examId }) {
         </div>
 
         {share.masked ? (
-          <div className="flex items-center justify-between rounded-lg border border-warn/20 bg-warn/5 px-3 py-2.5">
-            <span className="text-xs text-warn">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-warn/20 bg-warn/5 px-3 py-2.5">
+            <span className="flex items-center gap-2 text-xs text-warn">
+              <Icon name="lock" size={14} />
               Share sealed until the exam release window opens
             </span>
             <CountdownTimer seconds={share.seconds_remaining} />
           </div>
         ) : (
-          <div className="flex items-center justify-between rounded-lg border border-line bg-base/40 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-base/40 px-3 py-2.5">
             <span className="text-xs text-muted">
               {share.submitted
                 ? "You have authorized release of your share."
                 : "Window open — you may authorize release."}
             </span>
             <Button
-              tone={share.submitted ? "ghost" : "accent"}
+              tone={share.submitted ? "ghost" : "solid"}
               disabled={share.submitted}
               loading={submit.isPending}
+              icon={share.submitted ? "check" : "key"}
               onClick={() => submit.mutate()}
             >
-              {share.submitted ? "Share Submitted ✓" : "Submit Share"}
+              {share.submitted ? "Share Submitted" : "Submit Share"}
             </Button>
           </div>
         )}
@@ -126,6 +128,8 @@ function VaultPanel({ examId }) {
     <Card
       title="Vault Status"
       subtitle="live · shared across all custodians"
+      icon="shield"
+      iconTone={tone}
       tone={tone}
       right={<StatusPill tone={tone}>{status.status}</StatusPill>}
     >
@@ -145,8 +149,11 @@ function VaultPanel({ examId }) {
           />
         </div>
         {status.time_locked && (
-          <div className="flex items-center justify-between rounded-lg border border-line bg-base/40 px-3 py-2.5">
-            <span className="text-xs text-muted">Time gate releases in</span>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-base/40 px-3 py-2.5">
+            <span className="flex items-center gap-2 text-xs text-muted">
+              <Icon name="clock" size={14} className="text-warn" />
+              Time gate releases in
+            </span>
             <CountdownTimer seconds={status.seconds_remaining} />
           </div>
         )}
@@ -192,16 +199,12 @@ export function CustodianDashboard() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-ink">Custodian Console</h1>
-          <p className="text-sm text-muted">
-            You hold one of five key shares. Three are required to unseal — no
-            single custodian can open the vault.
-          </p>
-        </div>
-        <StatusPill tone="secure">{active?.username}</StatusPill>
-      </div>
+      <PageHeader
+        icon="users"
+        title="Custodian Console"
+        subtitle="You hold one of five key shares. Three are required to unseal — no single custodian can open the vault."
+        right={<StatusPill tone="secure">{active?.username}</StatusPill>}
+      />
 
       <ExamPicker examId={examId} onSelect={setExamId} />
 
@@ -211,7 +214,7 @@ export function CustodianDashboard() {
           <VaultPanel examId={examId} />
         </div>
       ) : (
-        <Card title="Custodian Console">
+        <Card title="Custodian Console" icon="users">
           <p className="text-sm text-faint">Waiting for an exam to be sealed.</p>
         </Card>
       )}

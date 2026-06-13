@@ -29,5 +29,17 @@ class Settings:
         """
         return hashlib.sha256(self.SECRET_KEY.encode()).digest()
 
+    def question_bank_key(self) -> bytes:
+        """32-byte key encrypting individual questions in the dynamic bank.
+
+        Domain-separated from server_wrap_key so the two keys are independent.
+        Question bodies are AES-256-GCM ciphertext at rest; a raw DB dump cannot
+        read them without this app secret. This protects the *bank contents*; the
+        unpredictability of which questions reach a given candidate is enforced
+        separately, by deriving the per-candidate selection from the exam key —
+        which only exists after the Shamir quorum and the time gate both open.
+        """
+        return hashlib.sha256(self.SECRET_KEY.encode() + b"|question-bank").digest()
+
 
 settings = Settings()

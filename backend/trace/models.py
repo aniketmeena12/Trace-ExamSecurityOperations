@@ -35,6 +35,10 @@ ALL_ROLES = (ROLE_ADMIN, ROLE_CUSTODIAN, ROLE_CANDIDATE, ROLE_INVESTIGATOR)
 STATUS_SEALED = "SEALED"
 STATUS_UNLOCKED = "UNLOCKED"
 
+# Paper assembly mode
+ASSEMBLY_STATIC = "static"    # one fixed paper sealed in the vault (M2 default)
+ASSEMBLY_DYNAMIC = "dynamic"  # paper assembled per-candidate from the question bank
+
 
 class User(Base):
     __tablename__ = "users"
@@ -76,6 +80,14 @@ class Exam(Base):
     # After a legitimate unlock, the paper's AES key is re-wrapped under the
     # server wrapping key so candidates can be served. Null until unlocked.
     released_key_wrapped = Column(LargeBinary, nullable=True)
+
+    # Dynamic assembly (M5): when assembly_mode == "dynamic" the vault holds a
+    # manifest (blueprint + question-pool ids) instead of a fixed paper, and each
+    # candidate's paper is assembled on demand from the encrypted question bank.
+    # blueprint is non-secret structure (sections + counts), kept out-of-vault for
+    # the dashboard; it reveals how many questions, never which ones are selected.
+    assembly_mode = Column(String, nullable=False, default=ASSEMBLY_STATIC)
+    blueprint = Column(Text, nullable=True)  # canonical JSON, dynamic exams only
 
     shares = relationship("CustodianShare", cascade="all, delete-orphan")
     submissions = relationship("ShareSubmission", cascade="all, delete-orphan")
@@ -125,6 +137,54 @@ class IssuedWatermark(Base):
     center_id = Column(String, nullable=False)
     candidate_code = Column(String, nullable=False)
     issued_at = Column(DateTime, nullable=False)
+
+
+class Question(Base):
+    """One encrypted question in the dynamic bank (M5).
+
+    Contributed by a setter/admin *before* any exam is sealed. The body (prompt +
+    options + answer) is AES-256-GCM ciphertext at rest, encrypted under the
+    server question-bank key — a raw DB dump cannot read it. The metadata columns
+    (subject/section/topic/difficulty) are plaintext: they drive blueprint
+    selection but reveal nothing about which questions land on a given paper.
+    """
+
+    __tablename__ = "questions"
+
+    id = Column(Integer, primary_key=True)
+    subject = Column(String, nullable=False, index=True)
+    section = Column(String, nullable=False, default="")
+    topic = Column(String, nullable=False, default="", index=True)
+    difficulty = Column(String, nullable=False, default="medium", index=True)
+
+    # AES-256-GCM of the question body JSON. NO plaintext body is ever stored.
+    nonce = Column(LargeBinary, nullable=False)
+    tag = Column(LargeBinary, nullable=False)
+    ciphertext = Column(LargeBinary, nullable=False)
+
+    contributor = Column(String, nullable=False)
+    active = Column(Integer, nullable=False, default=1)  # 1 = in pool, 0 = retired
+    created_at = Column(DateTime, nullable=False)
+
+
+class CandidatePaper(Base):
+    """Which questions were assembled for one candidate on one exam.
+
+    Records only the *selection* (a list of question ids) — never the assembled
+    plaintext paper, which exists transiently in memory during serving and is
+    never persisted. Lets the investigator reproduce/inspect a candidate's exact
+    variant and cross-reference a leak trace.
+    """
+
+    __tablename__ = "candidate_papers"
+    __table_args__ = (UniqueConstraint("exam_id", "username"),)
+
+    id = Column(Integer, primary_key=True)
+    exam_id = Column(Integer, ForeignKey("exams.id"), nullable=False, index=True)
+    username = Column(String, nullable=False)
+    candidate_code = Column(String, nullable=False)
+    selected_question_ids = Column(Text, nullable=False)  # canonical JSON list
+    assembled_at = Column(DateTime, nullable=False)
 
 
 class AuditEvent(Base):

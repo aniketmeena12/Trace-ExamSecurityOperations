@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "../auth/AuthContext";
 import { StatusLight } from "./primitives";
+import { Icon, ROLE_ICON } from "./Icon";
 
 const ROLE_ORDER = ["admin", "custodian", "candidate", "investigator"];
 const ROLE_LABEL = {
@@ -11,12 +12,6 @@ const ROLE_LABEL = {
   custodian: "Custodian",
   candidate: "Candidate",
   investigator: "Investigator",
-};
-const ROLE_GLYPH = {
-  admin: "▣",
-  custodian: "◆",
-  candidate: "▸",
-  investigator: "◎",
 };
 
 export function RoleSwitcher() {
@@ -34,7 +29,7 @@ export function RoleSwitcher() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
-            className="mb-2 flex flex-col gap-2 rounded-2xl border border-line bg-surface/95 p-2 shadow-glow backdrop-blur-md"
+            className="mb-2 flex flex-col gap-2 rounded-2xl border border-line bg-surface/95 p-2 shadow-lift backdrop-blur-xl"
           >
             <div className="flex items-center gap-1.5">
               {ROLE_ORDER.map((role) => {
@@ -50,7 +45,7 @@ export function RoleSwitcher() {
                         : "border-line text-muted hover:border-faint hover:text-ink"
                     }`}
                   >
-                    <span className="mono text-base">{ROLE_GLYPH[role]}</span>
+                    <Icon name={ROLE_ICON[role]} size={16} />
                     {ROLE_LABEL[role]}
                   </button>
                 );
@@ -84,11 +79,13 @@ export function RoleSwitcher() {
 
       <button
         onClick={() => setOpen((o) => !o)}
-        className="mx-auto flex items-center gap-2 rounded-full border border-line bg-surface/95 px-4 py-1.5 text-xs text-muted shadow-inset backdrop-blur-md hover:text-ink"
+        className="mx-auto flex items-center gap-2 rounded-full border border-line bg-surface/95 px-4 py-1.5 text-xs text-muted shadow-inset backdrop-blur-xl hover:text-ink"
       >
         <StatusLight tone="secure" pulse />
-        DEMO · role switcher
-        <span className="mono text-faint">{open ? "▾" : "▴"}</span>
+        <span className="font-medium uppercase tracking-[0.18em]">Demo</span>
+        <span className="text-faint">·</span>
+        role switcher
+        <Icon name={open ? "chevronDown" : "chevronUp"} size={14} className="text-faint" />
       </button>
     </div>
   );

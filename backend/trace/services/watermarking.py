@@ -15,7 +15,7 @@ from PIL import Image
 from sqlalchemy.orm import Session
 
 from .. import audit
-from ..models import Exam, IssuedWatermark
+from ..models import ASSEMBLY_DYNAMIC, Exam, IssuedWatermark
 from ..util import utcnow
 from ..watermark import (
     Registry,
@@ -24,6 +24,7 @@ from ..watermark import (
     render_paper,
     trace_image,
 )
+from . import assembly as assembly_service
 from . import exams as exam_service
 
 
@@ -38,8 +39,17 @@ def issue_paper_image(
     """Render + watermark the paper for one candidate; register the fingerprint.
 
     Returns (png_bytes, fingerprint_hex). Raises UnlockError if not released.
+
+    For a dynamic exam the text is assembled from the question bank for this exact
+    candidate; for a static exam it is the single sealed paper. Both paths raise
+    UnlockError while the vault is still sealed.
     """
-    text = exam_service.decrypt_paper_text(exam)  # raises if still sealed
+    if exam.assembly_mode == ASSEMBLY_DYNAMIC:
+        text, _ = assembly_service.assemble_paper_text(
+            db, exam, username=username, candidate_code=candidate_code
+        )
+    else:
+        text = exam_service.decrypt_paper_text(exam)  # raises if still sealed
 
     fp_int = _fingerprint_for(exam, candidate_code)
     fp_hex = f"{fp_int:016x}"

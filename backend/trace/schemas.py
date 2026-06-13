@@ -38,6 +38,11 @@ class ExamCreate(BaseModel):
     # Optional overrides; default paper = sample, default custodians = all custodians.
     paper_text: str | None = None
     custodian_usernames: list[str] | None = None
+    # Dynamic assembly (M5): set assembly_mode="dynamic" and provide a blueprint
+    # of {"sections": [{"name","topic","difficulty","count"}, ...]}. The paper is
+    # then assembled per-candidate from the encrypted question bank.
+    assembly_mode: str = "static"
+    blueprint: dict | None = None
 
 
 class ExamOut(BaseModel):
@@ -50,8 +55,43 @@ class ExamOut(BaseModel):
     num_custodians_n: int
     release_time: datetime
     unlocked_at: datetime | None = None
+    assembly_mode: str = "static"
 
     model_config = {"from_attributes": True}
+
+
+# ---- question bank / dynamic assembly ------------------------------------
+class QuestionCreate(BaseModel):
+    subject: str
+    section: str = ""
+    topic: str = ""
+    difficulty: str = "medium"
+    prompt: str
+    options: list[str] = Field(default_factory=list)
+    answer: str | None = None  # stored encrypted; never returned to candidates
+
+
+class QuestionOut(BaseModel):
+    """Bank metadata only — the encrypted body is never exposed over the API."""
+
+    id: int
+    subject: str
+    section: str
+    topic: str
+    difficulty: str
+    contributor: str
+    active: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class BlueprintOut(BaseModel):
+    exam_id: int
+    assembly_mode: str
+    blueprint: dict | None = None
+    pool_size: int  # distinct questions the blueprint can draw from
+    questions_per_paper: int  # total selected for each candidate
 
 
 class UnlockStatusOut(BaseModel):

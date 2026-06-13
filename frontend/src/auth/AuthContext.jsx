@@ -20,7 +20,17 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [sessions, setSessions] = useState({}); // username -> { token, me, ...identity }
-  const [activeKey, setActiveKey] = useState("admin");
+  // Initial dashboard can be deep-linked: ?id=cust2 (exact identity) or
+  // ?role=candidate (first identity of that role). Defaults to admin.
+  const [activeKey, setActiveKey] = useState(() => {
+    if (typeof window === "undefined") return "admin";
+    const p = new URLSearchParams(window.location.search);
+    const byId = IDENTITIES.find((i) => i.key === p.get("id"));
+    if (byId) return byId.key;
+    const byRole = IDENTITIES.find((i) => i.role === p.get("role"));
+    if (byRole) return byRole.key;
+    return "admin";
+  });
   const [status, setStatus] = useState("connecting"); // connecting | ready | error
   const [error, setError] = useState(null);
 

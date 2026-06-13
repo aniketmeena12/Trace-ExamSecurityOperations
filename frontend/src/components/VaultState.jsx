@@ -1,10 +1,12 @@
-// Compact vault-state indicator. M4 keeps motion minimal; the cinematic
-// time-lock vault is the M5 hero. State is driven entirely by backend data:
+// Compact vault-state indicator. The cinematic time-lock vault is the M5 hero;
+// here we present a clean, professional state badge. State is driven entirely
+// by backend data:
 //   SEALED + time_locked  -> sealed
 //   SEALED + enough shares + open window -> unsealing (transient)
 //   UNLOCKED -> open
 import { motion } from "framer-motion";
 import { StatusPill } from "./primitives";
+import { Icon } from "./Icon";
 
 export function VaultState({ status, timeLocked, sharesSubmitted, threshold }) {
   let state = "sealed";
@@ -12,9 +14,24 @@ export function VaultState({ status, timeLocked, sharesSubmitted, threshold }) {
   else if (!timeLocked && sharesSubmitted >= threshold) state = "unsealing";
 
   const cfg = {
-    sealed: { tone: "denied", label: "Vault Sealed", glyph: "🔒", ring: "border-danger/40" },
-    unsealing: { tone: "pending", label: "Unsealing", glyph: "🔓", ring: "border-warn/50" },
-    open: { tone: "secure", label: "Vault Open", glyph: "⬡", ring: "border-accent/50" },
+    sealed: {
+      tone: "denied",
+      label: "Vault Sealed",
+      icon: "lock",
+      ring: "border-danger/40 text-danger",
+    },
+    unsealing: {
+      tone: "pending",
+      label: "Unsealing",
+      icon: "unlock",
+      ring: "border-warn/50 text-warn",
+    },
+    open: {
+      tone: "secure",
+      label: "Vault Open",
+      icon: "shieldCheck",
+      ring: "border-accent/50 text-accent",
+    },
   }[state];
 
   return (
@@ -22,13 +39,19 @@ export function VaultState({ status, timeLocked, sharesSubmitted, threshold }) {
       <motion.div
         animate={
           state === "unsealing"
-            ? { boxShadow: ["0 0 0px rgba(245,177,61,0.2)", "0 0 26px rgba(245,177,61,0.5)", "0 0 0px rgba(245,177,61,0.2)"] }
+            ? {
+                boxShadow: [
+                  "0 0 0px rgba(247,183,51,0.2)",
+                  "0 0 28px rgba(247,183,51,0.5)",
+                  "0 0 0px rgba(247,183,51,0.2)",
+                ],
+              }
             : {}
         }
         transition={{ repeat: Infinity, duration: 1.8 }}
-        className={`flex h-14 w-14 items-center justify-center rounded-xl border bg-base/60 text-2xl ${cfg.ring}`}
+        className={`flex h-14 w-14 items-center justify-center rounded-2xl border bg-base/60 ${cfg.ring}`}
       >
-        {cfg.glyph}
+        <Icon name={cfg.icon} size={26} strokeWidth={1.7} />
       </motion.div>
       <div className="flex flex-col gap-1.5">
         <StatusPill tone={cfg.tone} pulse={state === "unsealing"}>

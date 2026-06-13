@@ -15,3 +15,6 @@ httpx>=0.27          # for FastAPI TestClient
 opencv-python-headless>=4.9
 numpy>=1.26
 pillow>=10.2
+
+# Docs — generate the project documentation (scripts/build_docs.py):
+python-docx>=1.1

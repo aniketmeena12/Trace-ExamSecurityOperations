@@ -19,10 +19,21 @@
   body {
     @apply bg-base text-ink font-sans antialiased;
     font-feature-settings: "ss01", "cv01";
+    text-rendering: optimizeLegibility;
   }
   /* App-wide ambient background: radial accent fade over a faint grid. */
   #root {
     @apply bg-radial-fade;
+  }
+  ::selection {
+    background: rgba(39, 220, 242, 0.28);
+    color: #eafdff;
+  }
+  /* Consistent, on-theme focus ring for keyboard users. */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(5, 7, 11, 1), 0 0 0 4px rgba(39, 220, 242, 0.55);
+    border-radius: 0.6rem;
   }
 }
 
@@ -36,6 +47,38 @@
   .mono {
     @apply font-mono tracking-tight;
   }
+
+  /* Frosted-glass panel used by floating UI (header, role switcher, splash). */
+  .glass {
+    @apply border border-line bg-surface/80 backdrop-blur-xl;
+  }
+
+  /* Eyebrow / kicker label — small uppercase tracking used across headers. */
+  .kicker {
+    @apply text-[10px] font-semibold uppercase tracking-[0.28em] text-faint;
+  }
+
+  /* Gradient hairline divider. */
+  .rule {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-line to-transparent;
+  }
+
+  /* Animated sheen overlay (place inside a relative, overflow-hidden parent). */
+  .sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.06) 50%,
+      transparent 70%
+    );
+    transform: translateX(-120%);
+    animation: sweep 2.6s ease-in-out infinite;
+    pointer-events: none;
+  }
+
   /* Custom thin scrollbars for the ops feel */
   .scroll-thin::-webkit-scrollbar {
     width: 8px;
@@ -44,7 +87,23 @@
   .scroll-thin::-webkit-scrollbar-thumb {
     @apply bg-line rounded;
   }
+  .scroll-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-faint;
+  }
   .scroll-thin::-webkit-scrollbar-track {
     background: transparent;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Text with an accent gradient — used for hero numerals and brand. */
+  .text-gradient {
+    background: linear-gradient(180deg, #eafdff 0%, #94eefb 55%, #27dcf2 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 }
