@@ -80,6 +80,7 @@ export function useAudit() {
     queryKey: ["audit", username],
     queryFn: () => api.get("/audit", token),
     enabled: !!token,
+    refetchInterval: 4000, // keep the ledger live as new events are recorded
   });
 }
 

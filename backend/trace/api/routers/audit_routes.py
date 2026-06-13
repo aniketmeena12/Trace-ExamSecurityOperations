@@ -20,9 +20,12 @@ def list_events(
     db: Session = Depends(get_db),
     user: User = Depends(_VIEWERS),
 ):
-    return (
-        db.query(AuditEvent).order_by(AuditEvent.id.asc()).limit(limit).all()
+    # Return the most RECENT `limit` events (so fresh detections stay visible as
+    # the ledger grows), in ascending order for the dashboard's chronological view.
+    rows = (
+        db.query(AuditEvent).order_by(AuditEvent.id.desc()).limit(limit).all()
     )
+    return list(reversed(rows))
 
 
 @router.get("/verify", response_model=ChainVerifyOut)
