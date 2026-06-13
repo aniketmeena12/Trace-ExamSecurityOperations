@@ -185,15 +185,16 @@ toc_items = [
     "7.  Guarantee 1 — Multi-Custodian, Time-Locked Decryption",
     "8.  Guarantee 2 — Invisible Per-Candidate Watermarking",
     "9.  Guarantee 3 — Tamper-Evident Audit Log",
-    "10. The Backend — Modules & Data Model",
-    "11. The API — Every Endpoint",
-    "12. The Frontend — Four Role Dashboards",
-    "13. Security Model & Trust Boundary",
-    "14. Testing & Verification",
-    "15. How to Run It Yourself",
-    "16. Build Status (Milestones)",
-    "17. Project Layout",
-    "18. Glossary",
+    "10. Defense in Depth — Dynamic Assembly & Leak-Match Detector",
+    "11. The Backend — Modules & Data Model",
+    "12. The API — Every Endpoint",
+    "13. The Frontend — Four Role Dashboards",
+    "14. Security Model & Trust Boundary",
+    "15. Testing & Verification",
+    "16. How to Run It Yourself",
+    "17. Build Status (Milestones)",
+    "18. Project Layout",
+    "19. Glossary",
 ]
 for item in toc_items:
     p = doc.add_paragraph(item)
@@ -389,15 +390,59 @@ para(doc, "Each event's hash is computed over its own fields plus the previous e
 code_block(doc, "hash(i) = SHA256( id | timestamp | actor | action | target | details | prev_hash )")
 bullet(doc, "The chain starts from a fixed genesis hash (64 zeros).")
 bullet(doc, "Recorded actions include: LOGIN, EXAM_SEALED, SHARE_SUBMITTED, UNLOCK_DENIED, "
-            "PAPER_UNLOCKED, PAPER_ACCESSED, WATERMARK_ISSUED, LEAK_TRACED, AUDIT_VERIFIED.")
+            "PAPER_UNLOCKED, PAPER_ACCESSED, WATERMARK_ISSUED, LEAK_TRACED, AUDIT_VERIFIED, "
+            "QUESTION_ADDED, PAPER_ASSEMBLED, and LEAK_MATCHED.")
 bullet(doc, "Verification recomputes every hash and checks every prev_hash link. If anyone edits, "
             "inserts, or deletes a row, the recomputed hash stops matching and the break is reported "
             "with the exact event id.")
 bullet(doc, "A threading lock serialises appends so concurrent writes cannot corrupt the tail "
             "(a real concurrency race that was caught and fixed during development).")
 
-# ---- 10. BACKEND ------------------------------------------------------------
-heading(doc, "10.  The Backend — Modules & Data Model", 1)
+# ---- 10. DEFENSE IN DEPTH ---------------------------------------------------
+heading(doc, "10.  Defense in Depth — Dynamic Assembly & Leak-Match Detector", 1)
+para(doc, "Beyond the three core guarantees, Trace adds two further layers that directly shrink "
+          "the chance and the blast radius of a leak — and trace one even when no image exists.")
+
+heading(doc, "10.1  Dynamic per-candidate paper assembly", 2)
+para(doc, "A static exam is one secret blob: leak it once and the whole exam is compromised, for "
+          "everyone. Dynamic assembly removes that single point of failure. Instead of one paper, the "
+          "system keeps a large bank of individually-encrypted questions; at release time a blueprint "
+          "(sections + counts) and a per-candidate seed select a unique subset and assemble that "
+          "candidate's paper on demand.")
+bullet(doc, "Each question body is AES-256-GCM ciphertext at rest, under a server question-bank key "
+            "that is domain-separated from the vault key — a database dump cannot read the bank.",
+       bold_lead="Encrypted bank —")
+bullet(doc, "The selection seed is HMAC(exam_key, \"exam:candidate:section\"). Because the exam key "
+            "only exists after the Shamir quorum AND the time gate open, no setter, admin, or "
+            "database reader can predict which questions reach which candidate before release.",
+       bold_lead="Unpredictable —")
+bullet(doc, "Every candidate's paper is content-distinct, so a leaked copy exposes only one variant — "
+            "and, combined with the DCT watermark, still names its owner.",
+       bold_lead="Low blast radius —")
+bullet(doc, "At seal time the per-section pools are frozen inside the encrypted manifest, so retiring "
+            "or editing a bank question later cannot change (or break) an already-sealed exam's papers.",
+       bold_lead="Immutable once sealed —")
+bullet(doc, "Only the selection (a list of question ids) is recorded per candidate — the assembled "
+            "paper is never persisted in plaintext; it exists only in memory while one request is served.",
+       bold_lead="Never stored —")
+
+heading(doc, "10.2  Leak-match detector (text-only leaks)", 2)
+para(doc, "Real leaks are often just text — a question pasted into a chat group, with no image to "
+          "trace. The leak-match detector handles exactly this case. An investigator pastes the "
+          "suspected text and Trace:")
+bullet(doc, "matches it against the encrypted bank by token-containment on each question's prompt "
+            "(option labels are excluded so short prompts are not over-matched), flagging every "
+            "question the text contains;", bold_lead="Identifies what leaked —")
+bullet(doc, "intersects the per-candidate selection records: a candidate whose paper contained every "
+            "matched question is a prime suspect; otherwise the highest-overlap candidate is the "
+            "strongest lead. The issued-watermark fingerprint is attached for an image follow-up.",
+       bold_lead="Narrows who leaked it —")
+para(doc, "This is where dynamic assembly pays off forensically: because every candidate received a "
+          "different combination, a leak containing several questions intersects to a very small "
+          "suspect set — often a single candidate.")
+
+# ---- 11. BACKEND ------------------------------------------------------------
+heading(doc, "11.  The Backend — Modules & Data Model", 1)
 heading(doc, "Module map", 2)
 make_table(doc,
     ["Module", "Responsibility"],
@@ -406,10 +451,10 @@ make_table(doc,
         ["security/", "passwords (bcrypt), tokens (JWT), deps (role guards), keywrap (server key wrapping)"],
         ["audit/", "chain.py — SHA-256 hash-chained event log + verification"],
         ["watermark/", "core (DCT embed/extract), render (text -> image), trace (registry match)"],
-        ["services/", "exams.py — the seal, unlock-ceremony, and serve logic"],
-        ["api/", "app.py (FastAPI factory) + routers/ (auth, exams, investigator, audit)"],
+        ["services/", "exams.py (seal/unlock/serve), assembly.py (dynamic question bank), leakmatch.py (text leak detector), watermarking.py"],
+        ["api/", "app.py (FastAPI factory) + routers/ (auth, exams, questions, investigator, audit)"],
         ["models.py / schemas.py / db.py", "SQLAlchemy tables, Pydantic request/response shapes, DB session"],
-        ["bootstrap.py / config.py", "demo-account seeding; env-driven settings"],
+        ["bootstrap.py / config.py", "demo seeding + idempotent migration; env-driven settings"],
     ],
     widths=[2.0, 4.5])
 
@@ -418,47 +463,55 @@ make_table(doc,
     ["Table", "Key fields", "Purpose"],
     [
         ["users", "username, role, password_hash, candidate_code, center_id", "Accounts for the four roles"],
-        ["exams", "name, release_time, threshold_k, num_custodians_n, nonce, tag, ciphertext, aad, status, released_key_wrapped", "A sealed paper and its unlock state"],
+        ["exams", "name, release_time, threshold_k, nonce, tag, ciphertext, aad, status, released_key_wrapped, assembly_mode, blueprint", "A sealed paper/manifest and its unlock state"],
         ["custodian_shares", "exam_id, custodian_id, x, y", "Each custodian's escrowed Shamir share"],
         ["share_submissions", "exam_id, custodian_id, submitted_at", "Authorizations during the unlock ceremony"],
+        ["questions", "subject, section, topic, difficulty, nonce, tag, ciphertext, contributor", "The encrypted question bank (bodies are ciphertext)"],
+        ["candidate_papers", "exam_id, username, selected_question_ids, assembled_at", "Per-candidate selection (ids only, never plaintext)"],
         ["issued_watermarks", "exam_id, username, fingerprint, center_id, candidate_code", "Registry for tracing leaked images"],
         ["audit_events", "timestamp, actor, action, target, details, prev_hash, hash", "The tamper-evident hash chain"],
     ],
     widths=[1.4, 3.0, 2.1])
 
-# ---- 11. API ----------------------------------------------------------------
-heading(doc, "11.  The API — Every Endpoint", 1)
+# ---- 12. API ----------------------------------------------------------------
+heading(doc, "12.  The API — Every Endpoint", 1)
 make_table(doc,
     ["Method", "Path", "Role", "Purpose"],
     [
         ["POST", "/auth/login", "any", "OAuth2 password login -> JWT"],
         ["GET", "/auth/me", "any", "Current user profile"],
-        ["POST", "/exams", "admin", "Seal a paper (encrypt + Shamir-split the key)"],
+        ["POST", "/exams", "admin", "Seal a paper/manifest (encrypt + Shamir-split the key)"],
         ["GET", "/exams", "any", "List all exams"],
         ["GET", "/exams/{id}", "any", "Inspect one exam's metadata"],
         ["GET", "/exams/{id}/unlock/status", "any", "Live unlock progress (drives the vault UI)"],
+        ["GET", "/exams/{id}/blueprint", "any", "Dynamic exam structure (counts, not content)"],
         ["GET", "/exams/{id}/my-share", "custodian", "Fetch own share (masked until window opens)"],
         ["POST", "/exams/{id}/shares/submit", "custodian", "Authorize release of one share"],
-        ["GET", "/exams/{id}/paper", "candidate/admin/investigator", "Read released paper text (post-gate only)"],
+        ["GET", "/exams/{id}/paper", "candidate/admin/investigator", "Read released paper (assembled per-candidate if dynamic)"],
         ["GET", "/exams/{id}/paper/image", "candidate/admin", "Per-candidate watermarked PNG"],
+        ["POST", "/questions", "admin", "Add one AES-GCM-encrypted question to the bank"],
+        ["GET", "/questions", "admin", "List bank metadata only (never bodies)"],
         ["POST", "/investigator/trace", "investigator/admin", "Trace a leaked image to a candidate"],
+        ["POST", "/investigator/match", "investigator/admin", "Match leaked text to bank + narrow the source"],
         ["GET", "/audit", "investigator/admin", "The append-only event log"],
         ["GET", "/audit/verify", "investigator/admin", "Recompute the hash chain -> intact?"],
     ],
-    widths=[0.7, 2.3, 1.6, 1.9])
+    widths=[0.7, 2.4, 1.5, 1.9])
 para(doc, "Authentication is a JWT bearer token (HS256) issued at login, carrying the username and "
           "role, with a configurable lifetime (default 12 hours). Every protected route checks the "
           "role; missing/invalid tokens get 401, insufficient role gets 403.")
 
-# ---- 12. FRONTEND -----------------------------------------------------------
-heading(doc, "12.  The Frontend — Four Role Dashboards", 1)
+# ---- 13. FRONTEND -----------------------------------------------------------
+heading(doc, "13.  The Frontend — Four Role Dashboards", 1)
 para(doc, "A single dark \"security operations center\" web app hosts all four roles. A floating "
           "role-switcher (bottom center) jumps between them instantly — each identity is a real JWT "
           "session pre-authenticated against the backend, so there is no mock data anywhere.")
 heading(doc, "Admin (Exam Controller)", 2)
 para(doc, "Seal an exam (name, subject, center, threshold, release window), browse sealed exams, and "
           "watch a live operations panel: the vault animation, the share quorum, the encryption "
-          "badge, and the time-gate countdown — all polled from the real backend every 1.5 seconds.")
+          "badge, and the time-gate countdown — all polled from the real backend every 1.5 seconds. "
+          "A Static/Dynamic toggle switches the seal form to a blueprint editor for dynamic exams, and "
+          "the operations panel shows a live \"dynamic assembly\" strip (bank pool + per-candidate count).")
 heading(doc, "Custodian", 2)
 para(doc, "See your own key share (rendered as a masked pixel grid until the window opens, then "
           "revealed as hex), submit it with one action, and watch the shared quorum fill toward the "
@@ -467,17 +520,19 @@ heading(doc, "Candidate", 2)
 para(doc, "Before release: a countdown or an \"awaiting shares\" progress bar. After unlock: your own "
           "invisibly-watermarked paper image, with your fingerprint shown and a download button.")
 heading(doc, "Investigator", 2)
-para(doc, "Drag-drop a leaked image to trace it to a candidate (with confidence bar and bit "
-          "distance), and click \"Verify Integrity\" to recompute the SHA-256 ledger and confirm it "
-          "is intact — broken events would be highlighted in red.")
+para(doc, "Three tools in one console: a Leak-Match Detector (paste suspected leaked text to see the "
+          "matched bank questions with containment scores and a ranked suspect list); a Forensic Trace "
+          "(drag-drop a leaked image to trace it to a candidate, with confidence bar and bit distance); "
+          "and the Audit Ledger — click \"Verify Integrity\" to recompute the SHA-256 chain and confirm "
+          "it is intact, with any broken events highlighted in red.")
 heading(doc, "Design system", 2)
 para(doc, "A small set of reusable primitives (StatusPill, MonoReadout, Card, Metric, CountdownTimer, "
           "ShareSlots, VaultState, LogView) give the app a consistent mission-control look: cyan for "
           "secure, amber for pending/time-locked, red for denied/leak, green for verified, with glass "
           "morphism surfaces and JetBrains Mono / Space Grotesk typography.")
 
-# ---- 13. SECURITY MODEL -----------------------------------------------------
-heading(doc, "13.  Security Model & Trust Boundary", 1)
+# ---- 14. SECURITY MODEL -----------------------------------------------------
+heading(doc, "14.  Security Model & Trust Boundary", 1)
 para(doc, "Trace defends against the two threats that cause real exam leaks:")
 bullet(doc, "No one custodian (or pair) can open a paper. The key only exists after k distinct "
             "custodians authorize AND the server reconstructs it via Shamir. The key is never stored whole.",
@@ -520,9 +575,9 @@ para(doc, "In summary, direct access to the encrypted vault does not reveal exam
           "external, HSM-, or enclave-held shares, a database compromise alone would not be enough to "
           "recover an exam paper.")
 
-# ---- 14. TESTING ------------------------------------------------------------
-heading(doc, "14.  Testing & Verification", 1)
-para(doc, "Correctness is proven by an automated test suite (~816 lines, 8 files) covering the parts "
+# ---- 15. TESTING ------------------------------------------------------------
+heading(doc, "15.  Testing & Verification", 1)
+para(doc, "Correctness is proven by an automated test suite — 81 tests passing — covering the parts "
           "that matter most:")
 make_table(doc,
     ["Area", "What is proven"],
@@ -532,13 +587,15 @@ make_table(doc,
         ["AES-256-GCM", "Round-trip, tamper rejection, AAD binding, key/nonce/tag lengths"],
         ["Watermark", "DCT embed/extract, PSNR, magic detection, Hamming matching"],
         ["Audit chain", "Linkage, verification, tamper detection"],
+        ["Dynamic assembly", "Determinism, distinctness across candidates, blueprint counts, no plaintext at rest, release gating, post-seal immutability"],
+        ["Leak-match", "Exact-text match, no-match on unrelated text, owner-is-strongest-lead, role enforcement, audit"],
         ["API flow", "Role enforcement, the time gate blocking 3 valid shares, legitimate unlock, candidate access, watermark issue & trace"],
     ],
     widths=[1.6, 4.9])
 para(doc, "Run them with:  cd backend && pytest -v")
 
-# ---- 15. HOW TO RUN ---------------------------------------------------------
-heading(doc, "15.  How to Run It Yourself", 1)
+# ---- 16. HOW TO RUN ---------------------------------------------------------
+heading(doc, "16.  How to Run It Yourself", 1)
 heading(doc, "Backend (API server)", 2)
 code_block(doc,
     "cd backend\n"
@@ -565,8 +622,8 @@ para(doc, "The demo loop in the UI: as Admin seal an exam set to \"+30 sec\"; as
           "download your watermarked paper; as the Investigator upload that file to trace it, then "
           "Verify Integrity on the ledger.")
 
-# ---- 16. MILESTONES ---------------------------------------------------------
-heading(doc, "16.  Build Status (Milestones)", 1)
+# ---- 17. MILESTONES ---------------------------------------------------------
+heading(doc, "17.  Build Status (Milestones)", 1)
 make_table(doc,
     ["Milestone", "Scope", "Status"],
     [
@@ -575,13 +632,15 @@ make_table(doc,
         ["M3", "DCT watermark embed/extract/trace + JPEG-robustness test", "Done"],
         ["M3.5", "Watermark API wiring (image + trace + registry + custodian share)", "Done"],
         ["M4", "Frontend scaffold + 4 role dashboards wired to backend", "Done"],
+        ["Dynamic assembly", "Encrypted question bank + per-candidate paper assembly (leak-resistance layer)", "Done"],
+        ["Leak-match", "Text-leak detector: match to bank + narrow the source", "Done"],
         ["M5", "Hero visuals: forensic leak-trace reveal + time-lock vault", "In progress"],
         ["M6", "Seed data, one-command demo script, README, architecture diagram", "In progress"],
     ],
-    widths=[0.9, 4.4, 1.2])
+    widths=[1.3, 4.0, 1.2])
 
-# ---- 17. PROJECT LAYOUT -----------------------------------------------------
-heading(doc, "17.  Project Layout", 1)
+# ---- 18. PROJECT LAYOUT -----------------------------------------------------
+heading(doc, "18.  Project Layout", 1)
 code_block(doc,
     "trace/\n"
     "|- backend/\n"
@@ -590,10 +649,10 @@ code_block(doc,
     "|  |  |- security/   passwords . tokens(JWT) . deps . keywrap\n"
     "|  |  |- audit/      chain.py  (SHA-256 hash chain)\n"
     "|  |  |- watermark/  core(DCT) . render . trace      <- watermarking\n"
-    "|  |  |- services/   exams.py  (seal . unlock . serve)\n"
-    "|  |  |- api/        app.py + routers/ (auth . exams . investigator . audit)\n"
+    "|  |  |- services/   exams.py . assembly.py (dynamic bank) . leakmatch.py . watermarking.py\n"
+    "|  |  |- api/        app.py + routers/ (auth . exams . questions . investigator . audit)\n"
     "|  |  |- models.py . schemas.py . db.py . config.py . bootstrap.py\n"
-    "|  |- tests/         gf256 . shamir . aes_gcm . watermark . audit_chain . api\n"
+    "|  |- tests/         gf256 . shamir . aes_gcm . watermark . audit_chain . api . assembly . leakmatch\n"
     "|  |- cli/           crypto_demo.py . api_demo.py . watermark_demo.py\n"
     "|- frontend/         React app (Vite + Tailwind + React Query)\n"
     "|  |- src/\n"
@@ -604,8 +663,8 @@ code_block(doc,
     "|- sample_data/      sample_paper.txt\n"
     "|- scripts/          run_demo.sh, build_docs.py")
 
-# ---- 18. GLOSSARY -----------------------------------------------------------
-heading(doc, "18.  Glossary", 1)
+# ---- 19. GLOSSARY -----------------------------------------------------------
+heading(doc, "19.  Glossary", 1)
 make_table(doc,
     ["Term", "Plain-language meaning"],
     [
@@ -620,6 +679,9 @@ make_table(doc,
         ["Custodian", "A trusted official who holds one share of the decryption key."],
         ["Time gate", "The server rule that refuses decryption until the official release time, no matter what."],
         ["JWT", "A signed token that proves who a logged-in user is and what role they hold."],
+        ["Dynamic assembly", "Building each candidate's paper on demand from a bank of encrypted questions, so no full paper exists before release."],
+        ["Blueprint", "The recipe for a dynamic exam: which sections, topics, difficulties, and how many questions each."],
+        ["Containment match", "A similarity measure: what fraction of a question's words appear in a leaked text — used to detect text leaks."],
     ],
     widths=[1.8, 4.7])
 
