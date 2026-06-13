@@ -120,7 +120,10 @@ export function useTrace() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (file) => api.uploadImage("/investigator/trace", token, file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["audit"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["audit"] });
+      qc.invalidateQueries({ queryKey: ["cases"] });
+    },
   });
 }
 
@@ -129,6 +132,28 @@ export function useLeakMatch() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (text) => api.post("/investigator/match", token, { text }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["audit"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["audit"] });
+      qc.invalidateQueries({ queryKey: ["cases"] });
+    },
+  });
+}
+
+export function useCases() {
+  const { token, username } = useActive();
+  return useQuery({
+    queryKey: ["cases", username],
+    queryFn: () => api.get("/investigator/cases", token),
+    enabled: !!token,
+    refetchInterval: 4000,
+  });
+}
+
+export function useCase(caseId) {
+  const { token, username } = useActive();
+  return useQuery({
+    queryKey: ["case", caseId, username],
+    queryFn: () => api.get(`/investigator/cases/${caseId}`, token),
+    enabled: !!token && !!caseId,
   });
 }

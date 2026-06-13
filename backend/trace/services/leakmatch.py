@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from .. import audit
 from ..models import CandidatePaper, IssuedWatermark, Question
+from . import cases
 from .assembly import decrypt_question_body
 
 _TOKEN = re.compile(r"[a-z0-9]+")
@@ -71,13 +72,37 @@ def match_leak(
     matched = matched[:top_k]
     matched_ids = {m["question_id"] for m in matched}
 
-    suspects = _narrow_candidates(db, matched_ids) if matched_ids else []
+    raw_suspects = _narrow_candidates(db, matched_ids) if matched_ids else []
+    # Enrich each suspect with their full identity profile (name, centre, the copy
+    # issued to them, the questions on their paper) for the case file.
+    suspects = [
+        cases.enrich_candidate(
+            db,
+            username=s["username"],
+            exam_id=s["exam_id"],
+            matched_of_leak=s["matched_of_leak"],
+            has_all=s["has_all"],
+        )
+        for s in raw_suspects
+    ]
+    note = _summarise(matched, raw_suspects)
+
+    case = cases.create_case(
+        db,
+        kind="text",
+        created_by=actor,
+        summary=note,
+        query_preview=text,
+        payload={"leaked_chars": len(text), "matched_questions": matched, "suspects": suspects, "note": note},
+        top_candidate=suspects[0]["candidate_code"] if suspects else None,
+    )
 
     audit.record(
         db,
         actor=actor,
         action=audit.chain.LEAK_MATCHED,
         details={
+            "case_id": case.id,
             "matched_questions": len(matched),
             "best_containment": matched[0]["containment"] if matched else 0.0,
             "suspects": len(suspects),
@@ -86,10 +111,11 @@ def match_leak(
     db.commit()
 
     return {
+        "case_id": case.id,
         "leaked_chars": len(text),
         "matched_questions": matched,
         "suspects": suspects,
-        "note": _summarise(matched, suspects),
+        "note": note,
     }
 
 

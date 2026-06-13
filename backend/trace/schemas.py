@@ -142,19 +142,49 @@ class MatchedQuestion(BaseModel):
 
 
 class LeakSuspect(BaseModel):
+    """An implicated candidate with their full identity profile."""
+
     username: str
-    candidate_code: str
-    exam_id: int
-    matched_of_leak: int
-    has_all: bool
+    candidate_code: str | None = None
+    display_name: str | None = None
+    center_id: str | None = None
+    exam_id: int | None = None
     fingerprint: str | None = None
+    issued_at: str | None = None
+    question_ids: list[int] | None = None
+    # text-match specifics
+    matched_of_leak: int | None = None
+    has_all: bool | None = None
+    # image-trace specifics
+    confidence: float | None = None
+    bit_distance: int | None = None
 
 
 class LeakMatchOut(BaseModel):
+    case_id: int
     leaked_chars: int
     matched_questions: list[MatchedQuestion]
     suspects: list[LeakSuspect]
     note: str
+
+
+# ---- persisted leak cases ------------------------------------------------
+class LeakCaseSummary(BaseModel):
+    id: int
+    kind: str
+    created_at: datetime
+    created_by: str
+    summary: str
+    top_candidate: str | None = None
+    query_preview: str
+
+    model_config = {"from_attributes": True}
+
+
+class LeakCaseDetail(LeakCaseSummary):
+    suspects: list[LeakSuspect] = []
+    matched_questions: list[MatchedQuestion] = []
+    note: str | None = None
 
 
 # ---- watermark / trace ---------------------------------------------------
@@ -172,6 +202,7 @@ class TraceOut(BaseModel):
     match: TraceMatch | None = None
     bit_distance: int | None = None
     confidence: float
+    case_id: int | None = None
 
 
 # ---- audit ---------------------------------------------------------------

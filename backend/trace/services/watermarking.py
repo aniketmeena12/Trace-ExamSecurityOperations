@@ -25,6 +25,7 @@ from ..watermark import (
     trace_image,
 )
 from . import assembly as assembly_service
+from . import cases
 from . import exams as exam_service
 
 
@@ -116,11 +117,40 @@ def trace_leak(db: Session, image_bytes: bytes, *, actor: str) -> dict:
         "confidence": result["confidence"],
     }
 
+    # Persist a case file: for a hit, the traced candidate's full profile.
+    suspects = []
+    if match:
+        suspects = [
+            cases.enrich_candidate(
+                db,
+                username=match["username"],
+                exam_id=match["exam_id"],
+                confidence=round(out["confidence"], 4),
+                bit_distance=out["bit_distance"],
+            )
+        ]
+    summary = (
+        f"Image traced to {match['candidate_id']} ({round(out['confidence']*100)}% confidence)."
+        if match
+        else "No recoverable watermark in the uploaded image."
+    )
+    case = cases.create_case(
+        db,
+        kind="image",
+        created_by=actor,
+        summary=summary,
+        query_preview=f"image upload · recovered fp {out['extracted_fingerprint']}",
+        payload={**out, "suspects": suspects, "note": summary},
+        top_candidate=match["candidate_id"] if match else None,
+    )
+    out["case_id"] = case.id
+
     audit.record(
         db,
         actor=actor,
         action=audit.chain.LEAK_TRACED,
         details={
+            "case_id": case.id,
             "present": out["watermark_present"],
             "fingerprint": out["extracted_fingerprint"],
             "matched_candidate": match["candidate_id"] if match else None,

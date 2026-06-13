@@ -11,7 +11,14 @@ import {
 import { PageHeader } from "../components/PageHeader";
 import { Icon } from "../components/Icon";
 import { LogView } from "../components/LogView";
-import { useAudit, useLeakMatch, useTrace, useVerifyChain } from "../api/hooks";
+import {
+  useAudit,
+  useCase,
+  useCases,
+  useLeakMatch,
+  useTrace,
+  useVerifyChain,
+} from "../api/hooks";
 
 function TraceResult({ result }) {
   if (!result) return null;
@@ -277,6 +284,114 @@ function LeakMatchPanel() {
   );
 }
 
+function CandidateCard({ c }) {
+  const rows = [
+    ["roll number", c.candidate_code],
+    ["name", c.display_name],
+    ["exam centre", c.center_id],
+    ["login", c.username],
+    ["exam", c.exam_id != null ? `#${c.exam_id}` : null],
+    ["watermark fingerprint", c.fingerprint],
+    ["issued at", c.issued_at ? c.issued_at.slice(0, 19).replace("T", " ") : null],
+    ["questions on paper", c.question_ids ? c.question_ids.join(", ") : null],
+    ["match confidence", c.confidence != null ? `${Math.round(c.confidence * 100)}%` : null],
+    ["matched of leak", c.matched_of_leak != null ? `${c.matched_of_leak}${c.has_all ? " (all)" : ""}` : null],
+  ].filter(([, v]) => v != null && v !== "");
+  return (
+    <div className="rounded-xl border border-danger/30 bg-danger/[0.04] p-4">
+      <div className="flex items-baseline justify-between">
+        <span className="mono text-xl font-bold text-danger">{c.candidate_code || c.username}</span>
+        {c.has_all && <StatusPill tone="denied">received all</StatusPill>}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex flex-col">
+            <span className="kicker">{k}</span>
+            <span className="mono text-xs text-ink break-all">{v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CaseDetail({ caseId }) {
+  const { data: c } = useCase(caseId);
+  if (!c) return <p className="text-xs text-faint">loading case…</p>;
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <StatusPill tone={c.kind === "image" ? "denied" : "royal"}>{c.kind} case #{c.id}</StatusPill>
+        <span className="mono text-[11px] text-faint">
+          {c.created_at.slice(0, 19).replace("T", " ")} · by {c.created_by}
+        </span>
+      </div>
+      <p className="text-sm text-ink">{c.summary}</p>
+      {c.suspects?.length ? (
+        <div className="flex flex-col gap-2">
+          <SectionLabel>implicated candidate{c.suspects.length > 1 ? "s" : ""} — full details</SectionLabel>
+          {c.suspects.map((s) => (
+            <CandidateCard key={`${s.exam_id}:${s.username}`} c={s} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-faint">No candidate implicated in this case.</p>
+      )}
+    </div>
+  );
+}
+
+function CaseFilesPanel() {
+  const { data: cases } = useCases();
+  const [openId, setOpenId] = useState(null);
+  return (
+    <Card
+      title="Case Files"
+      subtitle="every detection, with the full candidate profile — reopen any time"
+      icon="database"
+      iconTone="royal"
+    >
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+        <div className="flex max-h-[420px] flex-col gap-1.5 overflow-auto pr-1">
+          {(cases || []).map((k) => (
+            <button
+              key={k.id}
+              onClick={() => setOpenId(k.id)}
+              className={`flex flex-col rounded-lg border px-3 py-2 text-left transition-colors ${
+                k.id === openId
+                  ? "border-danger/40 bg-danger/5"
+                  : "border-line hover:border-faint hover:bg-white/[0.015]"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="mono text-xs text-danger">
+                  #{k.id} · {k.top_candidate || "no source"}
+                </span>
+                <span className="kicker">{k.kind}</span>
+              </div>
+              <span className="mt-0.5 truncate text-[11px] text-faint">{k.summary}</span>
+            </button>
+          ))}
+          {!cases?.length && (
+            <p className="py-3 text-center text-xs text-faint">
+              no cases yet — run a trace or a leak match
+            </p>
+          )}
+        </div>
+        <div className="rounded-xl border border-line bg-base/30 p-3">
+          {openId ? (
+            <CaseDetail caseId={openId} />
+          ) : (
+            <p className="grid h-full place-items-center text-xs text-faint">
+              select a case to see the candidate's full details
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function AuditLedger() {
   const { data: events } = useAudit();
   const verify = useVerifyChain();
@@ -344,6 +459,7 @@ export function InvestigatorDashboard() {
         subtitle="Trace leaked papers to their source and verify the tamper-evident audit chain."
       />
       <LeakMatchPanel />
+      <CaseFilesPanel />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <TracePanel />
         <AuditLedger />

@@ -187,6 +187,27 @@ class CandidatePaper(Base):
     assembled_at = Column(DateTime, nullable=False)
 
 
+class LeakCase(Base):
+    """A persisted forensic case: the result of one leak detection.
+
+    Created whenever an investigator runs an image trace or a text match. Stores
+    the full result — including the enriched candidate profiles — so a past
+    detection (referenced by case_id from its audit event) can be reopened later
+    to see exactly who was implicated, without re-supplying the leaked artifact.
+    """
+
+    __tablename__ = "leak_cases"
+
+    id = Column(Integer, primary_key=True)
+    kind = Column(String, nullable=False)  # "image" | "text"
+    created_at = Column(DateTime, nullable=False)
+    created_by = Column(String, nullable=False)  # investigator username
+    summary = Column(String, nullable=False)  # human-readable verdict
+    top_candidate = Column(String, nullable=True)  # candidate_code of the lead, for the list view
+    query_preview = Column(String, nullable=False, default="")  # leaked-text excerpt / image note
+    payload = Column(Text, nullable=False)  # canonical JSON: full result + enriched candidates
+
+
 class AuditEvent(Base):
     """Append-only, SHA-256 hash-chained audit record.
 
