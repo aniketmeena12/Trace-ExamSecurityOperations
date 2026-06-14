@@ -1,0 +1,55 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: trace-db
+    environment:
+      POSTGRES_USER: trace
+      POSTGRES_PASSWORD: trace-dev-password
+      POSTGRES_DB: trace_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trace"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: trace-api
+    environment:
+      TRACE_DB_URL: postgresql://trace:trace-dev-password@postgres:5432/trace_db
+      TRACE_SECRET_KEY: dev-docker-secret-key-change-in-prod
+      TRACE_FRONTEND_ORIGIN: http://localhost:5173
+      TRACE_TOKEN_TTL_MIN: 720
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "python -c 'from trace.bootstrap import bootstrap; bootstrap()' &&
+             gunicorn --workers 4 --worker-class uvicorn.workers.UvicornWorker 
+             --bind 0.0.0.0:8000 --reload trace.api.app:app"
+
+  frontend:
+    image: node:20-alpine
+    container_name: trace-frontend
+    working_dir: /app
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev"
+
+volumes:
+  postgres_data:
