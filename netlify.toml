@@ -1,10 +1,7 @@
 [build]
-  command = "npm run build"
+  command = "VITE_API_URL=https://trace-examsecurityoperations-production.up.railway.app npm run build"
   base = "frontend"
   publish = "dist"
-
-[build.environment]
-  VITE_API_URL = "https://trace-examsecurityoperations-production.up.railway.app"
 
 [[redirects]]
   from = "/*"
