@@ -18,3 +18,8 @@ pillow>=10.2
 
 # Docs — generate the project documentation (scripts/build_docs.py):
 python-docx>=1.1
+
+# Production:
+psycopg2-binary>=2.9      # PostgreSQL adapter
+gunicorn>=21.2            # Production WSGI server for async
+python-dotenv>=1.0        # Environment variable management
