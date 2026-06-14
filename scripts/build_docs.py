@@ -195,6 +195,7 @@ toc_items = [
     "17. Build Status (Milestones)",
     "18. Project Layout",
     "19. Glossary",
+    "20. Appendix — Video Demo Script (2–4 min)",
 ]
 for item in toc_items:
     p = doc.add_paragraph(item)
@@ -684,6 +685,65 @@ make_table(doc,
         ["Containment match", "A similarity measure: what fraction of a question's words appear in a leaked text — used to detect text leaks."],
     ],
     widths=[1.8, 4.7])
+
+# ---- 20. DEMO SCRIPT --------------------------------------------------------
+heading(doc, "20.  Appendix — Video Demo Script (2–4 min)", 1)
+para(doc, "A ready-to-record narration for a short demo video so a judge understands the whole "
+          "project from the video alone. SAY = narration; SHOW = on-screen action. The full script "
+          "with a presenter checklist is also in DEMO_SCRIPT.md at the repo root.")
+
+def demo_beat(doc, t, say, show):
+    p = doc.add_paragraph()
+    r = p.add_run(t)
+    r.bold = True
+    r.font.color.rgb = ACCENT
+    bullet(doc, say, bold_lead="SAY —")
+    bullet(doc, show, bold_lead="SHOW —")
+
+demo_beat(doc, "0:00–0:20  Hook",
+    "Every year, exam-paper leaks destroy the careers of millions of honest students. One "
+    "insider with early access can compromise an entire exam — and once it's out, nobody can "
+    "prove whose copy it was. This is Trace: a paper impossible to open before the exam, and "
+    "traceable to its exact source if it ever leaks.",
+    "Title screen / the Trace dashboard header.")
+demo_beat(doc, "0:20–0:45  Problem",
+    "Two things go wrong: the insider leak (someone opens the paper early), and the "
+    "accountability gap (no way to trace a leaked copy back to its source).",
+    "A problem slide, or stay on the dashboard.")
+demo_beat(doc, "0:45–1:15  Solution",
+    "Three real guarantees: AES-256 + Shamir 3-of-5 across five custodians + a server time "
+    "lock; an invisible per-candidate watermark that survives a screen photo; and a "
+    "tamper-evident SHA-256 audit log. Plus two leak-crushing layers: dynamic per-candidate "
+    "papers and a leak-match detector.",
+    "Scroll the four role chips in the role-switcher.")
+demo_beat(doc, "1:15–1:45  Seal (Admin)",
+    "As the controller I seal an exam in Dynamic mode — each candidate gets a unique paper "
+    "assembled from an encrypted question bank. Release in thirty seconds. Seal it.",
+    "Admin → Seal a New Exam → Dynamic toggle → blueprint → +30s → Seal & Distribute; point to "
+    "the vault, the time gate, and the Dynamic Assembly strip.")
+demo_beat(doc, "1:45–2:15  Unlock (Custodians)",
+    "Each custodian submits one key share; the quorum fills two-of-three, three-of-three. But "
+    "even with every share in, the vault stays sealed until the clock hits zero — the time "
+    "gate — and then it opens.",
+    "Custodian → submit shares; back to Admin ops panel → vault animates UNLOCKED.")
+demo_beat(doc, "2:15–2:45  Unique papers (Candidate)",
+    "The candidate's own watermarked paper. Switch to a different candidate — the questions are "
+    "different. Every copy is content-distinct and individually fingerprinted, so a leak "
+    "exposes only one variant and points to its owner.",
+    "Candidate cand001 → paper + fingerprint; role-switch to cand002 → different questions.")
+demo_beat(doc, "2:45–3:25  Catch the leak (Investigator)",
+    "Suppose the paper turns up on a chat group. I paste the text into the Leak-Match Detector — "
+    "it names the suspect, R-001. If I have a photo instead, Forensic Trace recovers the "
+    "watermark even after JPEG re-compression and identifies the source at 100% confidence. "
+    "Every detection becomes a case file with the candidate's full details, sealed in a hash "
+    "chain — Verify Integrity: intact.",
+    "Investigator → Leak-Match (paste text) → suspect; Forensic Trace (upload image) → traced; "
+    "Case Files → open case → full candidate card; Verify Integrity → chain intact.")
+demo_beat(doc, "3:25–3:40  Close",
+    "Trace makes early opening cryptographically impossible, every copy traceable, and every "
+    "record tamper-proof — backed by 86 passing tests and crypto built from scratch. Leaks "
+    "become impossible to hide, and impossible to deny.",
+    "Return to the dashboard header; optional end card with the three guarantees.")
 
 doc.add_paragraph()
 add_hr(doc)
