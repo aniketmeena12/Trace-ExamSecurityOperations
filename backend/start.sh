@@ -25,7 +25,7 @@ TRACE_DB_URL=${TRACE_DB_URL:-"sqlite:///./trace.db"}
 TRACE_FRONTEND_ORIGIN=${TRACE_FRONTEND_ORIGIN:-"http://localhost:5173"}
 
 echo "✓ Environment configuration:"
-echo "  - Database: ${TRACE_DB_URL:0:50}..."
+echo "  - Database: $TRACE_DB_URL"
 echo "  - Frontend Origin: $TRACE_FRONTEND_ORIGIN"
 echo "  - Port: $PORT"
 
