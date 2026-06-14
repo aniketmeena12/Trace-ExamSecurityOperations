@@ -36,3 +36,5 @@ frontend/.vite/
 
 # Claude Code local tooling (skills library, session settings)
 .claude/
+DEMO_SCRIPT.md 
+CLAUDE.md 
