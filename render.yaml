@@ -1,0 +1,46 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Deploys the Trace FastAPI backend plus its PostgreSQL database.
+# The frontend stays on Netlify; point its VITE_API_URL at this service's URL.
+
+services:
+  - type: web
+    name: trace-backend
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: sh start.sh
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+
+      # Signs JWTs and derives the paper-key wrapping key. Generated once by
+      # Render and kept stable across deploys — rotating it invalidates every
+      # issued token and makes already-released paper keys unrecoverable.
+      - key: TRACE_SECRET_KEY
+        generateValue: true
+
+      # Internal connection string for the database defined below.
+      - key: TRACE_DB_URL
+        fromDatabase:
+          name: trace-db
+          property: connectionString
+
+      # Must match the deployed frontend origin exactly (scheme + host, no
+      # trailing slash) — CORS allows this single origin. Set in the dashboard.
+      - key: TRACE_FRONTEND_ORIGIN
+        sync: false
+
+      - key: TRACE_TOKEN_TTL_MIN
+        value: "720"
+
+      - key: ENVIRONMENT
+        value: production
+
+databases:
+  - name: trace-db
+    plan: free
+    databaseName: trace
+    user: trace

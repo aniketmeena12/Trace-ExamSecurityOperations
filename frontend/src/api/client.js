@@ -1,6 +1,6 @@
 // Thin fetch wrapper around the REAL Trace backend. No mock data anywhere.
 // In dev, Vite proxies /api -> http://127.0.0.1:8000 (see vite.config.js).
-// In production, VITE_API_URL is set to the Railway backend URL.
+// In production, VITE_API_URL is set to the Render backend URL.
 
 const BASE = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE || "/api";
 

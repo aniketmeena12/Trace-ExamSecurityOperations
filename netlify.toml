@@ -4,7 +4,7 @@
   publish = "dist"
 
 [build.environment]
-  VITE_API_URL = "https://trace-examsecurityoperations-production.up.railway.app"
+  VITE_API_URL = "https://trace-backend.onrender.com"
 
 [[redirects]]
   from = "/*"

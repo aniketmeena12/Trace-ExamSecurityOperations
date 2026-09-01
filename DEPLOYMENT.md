@@ -1,6 +1,8 @@
 # Trace — Deployment Guide
 
-This guide covers deploying Trace to production using Vercel (frontend) and Railway (backend).
+This guide covers deploying Trace to production. The live setup is **Netlify**
+(frontend) + **Render** (backend + PostgreSQL) — see the Render section below.
+The Vercel/Railway walkthrough further down is kept as an alternative.
 
 ## Prerequisites
 
@@ -8,6 +10,73 @@ This guide covers deploying Trace to production using Vercel (frontend) and Rail
 2. Vercel account (https://vercel.com - free tier is fine)
 3. Railway account (https://railway.app - $5/month credit)
 4. PostgreSQL database (Railway provides this)
+
+## 🟣 Deploy the Backend on Render (current setup)
+
+The repo ships a Blueprint at [`render.yaml`](render.yaml) that provisions the
+FastAPI service *and* its PostgreSQL database in one step. The frontend stays on
+Netlify (see [`netlify.toml`](netlify.toml)).
+
+### Step 1 — Create the Blueprint
+
+1. Push this repo to GitHub.
+2. Render dashboard → **New → Blueprint**.
+3. Pick the `Trace-ExamSecurityOperations` repo. Render reads `render.yaml`
+   from the repo root and shows a `trace-backend` web service plus a
+   `trace-db` PostgreSQL instance.
+4. Render prompts for the one variable it cannot generate:
+   `TRACE_FRONTEND_ORIGIN` → your Netlify origin, e.g.
+   `https://your-site.netlify.app` (scheme + host, **no trailing slash**).
+5. **Apply**. First build takes a few minutes.
+
+Everything else is wired by the Blueprint:
+
+| Variable | Source |
+|---|---|
+| `TRACE_SECRET_KEY` | generated once by Render, stable across deploys |
+| `TRACE_DB_URL` | internal connection string of `trace-db` |
+| `TRACE_FRONTEND_ORIGIN` | you, at Blueprint apply time |
+| `PORT` | injected by Render; `start.sh` reads it |
+
+### Step 2 — Point the frontend at the new backend
+
+The service URL is `https://<service-name>.onrender.com`. If the name
+`trace-backend` was already taken, Render appends a suffix — copy the real URL
+from the dashboard and make sure both of these match it:
+
+- `netlify.toml` → `[build.environment] VITE_API_URL`
+- `frontend/.env.production` → `VITE_API_URL`
+
+`VITE_API_URL` is baked in at build time, so **redeploy the Netlify site** after
+changing it. A stale value shows up as requests still hitting the old host.
+
+### Step 3 — Verify
+
+```bash
+curl https://<your-service>.onrender.com/health
+# {"status":"ok","service":"trace","version":"0.2.0"}
+```
+
+Then load the Netlify site and sign in. A CORS error in the browser console
+means `TRACE_FRONTEND_ORIGIN` doesn't exactly match the origin the browser
+sends — the API allows that single origin and nothing else.
+
+### Free-tier caveats
+
+- The web service **sleeps after ~15 min idle**; the next request takes ~50s to
+  wake it. Upgrade the instance, or ping `/health` on a schedule, to avoid it.
+- Free PostgreSQL instances **expire after 30 days**. Move to a paid plan
+  before then or the data goes away.
+- The filesystem is ephemeral. Do not fall back to SQLite here — without
+  `TRACE_DB_URL` the app writes `trace.db` to disk and loses it on every deploy.
+
+### Rotating `TRACE_SECRET_KEY`
+
+It signs JWTs *and* derives the wrapping key for released paper keys. Changing
+it logs everyone out **and** makes already-released paper keys undecryptable.
+Treat it as permanent for the life of the database.
+
+---
 
 ## 📦 Build Frontend for Production
 
