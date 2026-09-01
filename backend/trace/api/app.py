@@ -24,9 +24,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Logged at boot so a misconfigured origin is visible in the deploy logs
+    # rather than only as a CORS failure in someone's browser console.
+    origins = settings.frontend_origins
+    print(f"[trace] CORS allowed origins: {origins}", flush=True)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.FRONTEND_ORIGIN],
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

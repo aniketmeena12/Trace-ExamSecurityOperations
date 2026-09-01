@@ -18,8 +18,20 @@ class Settings:
 
     DB_URL: str = os.environ.get("TRACE_DB_URL", "sqlite:///./trace.db")
 
-    # CORS origin for the Vite dev server (M4).
+    # CORS origins. Accepts a comma-separated list so deploy previews, a custom
+    # domain, and the local dev server can coexist:
+    #   TRACE_FRONTEND_ORIGIN=https://app.example.com,http://localhost:5173
+    # Each entry is stripped and has any trailing slash removed — browsers send
+    # Origin as scheme://host[:port] with no path, so a stray slash or a space
+    # picked up from a copy-paste would otherwise match nothing at all and fail
+    # every request with an opaque CORS error.
     FRONTEND_ORIGIN: str = os.environ.get("TRACE_FRONTEND_ORIGIN", "http://localhost:5173")
+
+    @property
+    def frontend_origins(self) -> list[str]:
+        origins = [o.strip().rstrip("/") for o in self.FRONTEND_ORIGIN.split(",")]
+        origins = [o for o in origins if o]
+        return origins or ["http://localhost:5173"]
 
     def server_wrap_key(self) -> bytes:
         """32-byte key used to wrap a paper's AES key for post-release serving.
