@@ -8,6 +8,22 @@ import hashlib
 import os
 
 
+def _db_url() -> str:
+    """TRACE_DB_URL with PostgreSQL URLs pinned to the psycopg 3 driver.
+
+    A bare postgresql:// URL leaves the driver up to SQLAlchemy, and its default
+    changed from psycopg2 (2.0) to psycopg 3 (2.1) — so the same URL breaks when
+    a fresh deploy resolves a newer SQLAlchemy. Naming the driver removes that
+    dependency. Also accepts the legacy postgres:// form some providers hand out,
+    which SQLAlchemy 2.x rejects outright.
+    """
+    url = os.environ.get("TRACE_DB_URL", "sqlite:///./trace.db")
+    for scheme in ("postgres://", "postgresql://"):
+        if url.startswith(scheme):
+            return "postgresql+psycopg://" + url[len(scheme):]
+    return url
+
+
 class Settings:
     # Signs JWTs AND derives the server wrapping key for released paper keys.
     SECRET_KEY: str = os.environ.get(
@@ -16,7 +32,7 @@ class Settings:
     JWT_ALG: str = "HS256"
     ACCESS_TOKEN_TTL_MIN: int = int(os.environ.get("TRACE_TOKEN_TTL_MIN", "720"))
 
-    DB_URL: str = os.environ.get("TRACE_DB_URL", "sqlite:///./trace.db")
+    DB_URL: str = _db_url()
 
     # CORS origins. Accepts a comma-separated list so deploy previews, a custom
     # domain, and the local dev server can coexist:

@@ -20,12 +20,8 @@ if [ -z "$TRACE_DB_URL" ] && [ -n "$DATABASE_URL" ]; then
   echo "ℹ️  Using DATABASE_URL from PostgreSQL service"
 fi
 
-# SQLAlchemy 2.x only accepts the postgresql:// scheme; some providers still
-# hand out the legacy postgres:// form.
-case "$TRACE_DB_URL" in
-  postgres://*) TRACE_DB_URL="postgresql://${TRACE_DB_URL#postgres://}" ;;
-esac
-
+# postgres:// / postgresql:// are normalized to the psycopg driver in
+# trace/config.py, so every entrypoint (this script, gunicorn) gets it.
 export TRACE_DB_URL=${TRACE_DB_URL:-"sqlite:///./trace.db"}
 export TRACE_FRONTEND_ORIGIN=${TRACE_FRONTEND_ORIGIN:-"http://localhost:5173"}
 
